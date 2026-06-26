@@ -235,3 +235,111 @@ service. Roughly ordered by what blocks "going live."
 - Real store list, hours, and the true menu/pricing.
 - Tax handling: single rate vs. per-jurisdiction (likely the latter).
 - Brand: final logo, fonts, photography, voice.
+
+
+================================================================================
+## 🏗️ BACKEND MIGRATION PLAN (concrete — accounts, DB, payments)
+================================================================================
+The site is static today. To become a real, transactable app (user accounts, a
+database of locations, online payments) it needs a host that runs server code +
+a database. GitHub stays the source-of-truth + collaboration hub; the deploy
+target changes from GitHub Pages (static only) to a backend-capable platform.
+
+### Recommended stack
+- Host + serverless functions: **Vercel** (auto-deploys from GitHub on push).
+- Database + auth: **Supabase** (managed Postgres + Auth + row-level security).
+- Payments: **Stripe** (Checkout/Elements on the client, PaymentIntents + webhook
+  on the server).
+- Email/SMS: **SendGrid/Postmark** + **Twilio**.
+- All free tiers to build on; secrets live in host env vars, never in the repo.
+
+The donut renderer (donut-svg.js), pricing math (pricing.js), and scheduling
+(pickup.js) are plain JS and port over as-is for DISPLAY. The server re-validates
+pricing, capacity, and timezones authoritatively.
+
+### Database schema (Postgres / Supabase)  — prices stored in CENTS
+- users ......... id, email, name, phone, role(user|admin), created_at
+                  (or Supabase auth.users + a `profiles` table)
+- stores ........ id, name, address, lat, lng, timezone, phone, active
+- store_hours ... id, store_id→stores, weekday(0-6), open, close, cutoff
+- store_blackouts id, store_id→stores, date
+- store_settings  store_id, lead_time_min, slot_increment_min, slot_capacity_dozen
+- donut_types ... id, slug, name, shape(ring|shell), dough_color, dough_shade,
+                  blurb, allergens(text[]), active
+- fillings ...... id, slug, name, active
+- icings ........ id, slug, name, color, bonus_sprinkle(bool), is_custom(bool), active
+- sprinkle_colors id, slug, name, hex, active
+- pricing ....... base_dozen, additional_sprinkle_color, drizzle_cost, tax_rate,
+                  type_modifiers(jsonb), filling_modifiers(jsonb), icing_modifiers(jsonb)
+                  (one row, or per-store if prices vary by location)
+- premade_boxes . id, name, occasion, blurb, design(jsonb), active, sort
+- orders ........ id, user_id→users (nullable for guest), store_id→stores,
+                  pickup_at(timestamptz), status(pending|paid|in_production|ready|
+                  picked_up|canceled|refunded), subtotal_cents, tax_cents,
+                  total_cents, stripe_payment_intent, contact_name, email, phone,
+                  created_at
+- order_boxes ... id, order_id→orders, design(jsonb), qty, unit_price_cents
+- slot_bookings . id, store_id→stores, slot_start(timestamptz), dozen_count,
+                  order_id→orders  (aggregate per slot to enforce capacity)
+
+Capacity is enforced in a TRANSACTION: SELECT current dozen for (store, slot)
+FOR UPDATE, reject if + new dozen > capacity, else insert. Prevents the
+"two customers grab the last slot" race.
+
+### Where today's js/config.js data goes
+- PRICING ................ → `pricing` (convert dollars → cents)
+- STORES (+ hours/cutoffs) → `stores` / `store_hours` / `store_blackouts`
+- SCHEDULING_DEFAULTS .... → `store_settings`
+- DONUT_TYPES ............ → `donut_types`
+- FILLINGS / ICINGS ...... → `fillings` / `icings`
+- SPRINKLE_PALETTE ....... → `sprinkle_colors`
+- PREMADE_BOXES .......... → `premade_boxes`
+- GEO_LOOKUP / resolveLocation → real geocoding API (Google/Mapbox), server-side
+- bookedDozen() (mock) ... → real query against `slot_bookings`
+The frontend fetches all of the above via `GET /api/menu` and renders from it
+instead of the hardcoded config.
+
+### API endpoints (Vercel serverless / Next.js API routes)
+- GET  /api/menu ............ active stores, types, fillings, icings, sprinkles,
+                             premades, pricing (public, cached)
+- POST /api/slots .......... available 30-min times for {storeId, date}; server
+                             applies hours, cutoff, lead time, blackout, capacity,
+                             timezone (authoritative)
+- POST /api/quote .......... recompute cart totals from DB pricing; never trust
+                             client numbers
+- POST /api/checkout ....... re-validate + reserve slot capacity (txn) + create
+                             Stripe PaymentIntent(amount from server); returns
+                             client_secret
+- POST /api/stripe/webhook . verify signature; on payment_intent.succeeded →
+                             finalize order (status=paid), commit slot booking,
+                             fire email + SMS; on failure → release reservation
+- GET  /api/orders ......... current user's orders (auth required)
+- /admin/* ................. order management, menu CRUD (admin role only)
+
+### Stripe checkout flow (server-authoritative; PCI-safe)
+1. Client builds cart + pickup → POST /api/quote → server returns validated totals.
+2. Client "Pay" → POST /api/checkout → server reserves the slot + creates a
+   PaymentIntent for the server-computed amount → returns client_secret.
+3. Client confirms with Stripe.js (card entered in Stripe Elements/Checkout — card
+   data never touches our server).
+4. Stripe → POST /api/stripe/webhook (signature-verified) → create/confirm the
+   order as PAID, commit the slot booking, send confirmation email + SMS.
+5. If capacity was lost between reserve and confirm, void/refund and notify.
+
+### Secrets (host env vars — NOT in the repo)
+STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPABASE_URL,
+SUPABASE_SERVICE_ROLE_KEY, SENDGRID_API_KEY (or POSTMARK), TWILIO_*,
+GOOGLE_MAPS_API_KEY.
+
+### Build order (refines the phasing above)
+1. Supabase project → create schema → seed from config.js → ship GET /api/menu;
+   point the frontend at it.
+2. Auth (Supabase) + orders/order_boxes persistence + /api/orders.
+3. Stripe: /api/quote, /api/checkout (with capacity reservation), webhook.
+4. Email + SMS from the webhook; admin dashboard; real geocoding + live Google Map.
+5. Hardening: rate limiting, monitoring, legal pages, a11y audit, custom domain.
+
+> Decision to make early: keep the vanilla frontend and add serverless functions
+> beneath it (lowest rewrite), OR migrate the frontend to Next.js/React (unifies
+> frontend + API, first-class on Vercel, richest auth/Stripe ecosystem). The
+> existing JS logic moves over either way.
