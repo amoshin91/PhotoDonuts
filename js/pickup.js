@@ -58,6 +58,39 @@
     return null;
   }
 
+  // Build a short, friendly label from a Nominatim result.
+  function shortLabel(r) {
+    const a = r.address || {};
+    const place = a.city || a.town || a.village || a.hamlet || a.suburb || a.county;
+    const bits = [place, a.state].filter(Boolean);
+    return bits.length ? bits.join(", ") : (r.display_name || "").split(",").slice(0, 2).join(", ").trim();
+  }
+
+  // Resolve ANY zip / city / address to coordinates. Tries the instant local
+  // table first (offline-friendly), then OpenStreetMap Nominatim (free, no key).
+  // Returns { lat, lng, label } or null. Async because it may hit the network.
+  async function geocode(raw) {
+    const q = (raw || "").trim();
+    if (!q) return null;
+    const local = resolveLocation(q);
+    if (local) return local;
+    try {
+      const url =
+        "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=us&q=" +
+        encodeURIComponent(q);
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data || !data.length) return null;
+      const r = data[0];
+      const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
+      if (isNaN(lat) || isNaN(lng)) return null;
+      return { lat, lng, label: shortLabel(r) };
+    } catch (e) {
+      return null;
+    }
+  }
+
   // ---- timezone helpers -----------------------------------------------------
   // Wall-clock parts for an instant in a given IANA tz.
   function partsInZone(tz, instant) {
@@ -240,6 +273,7 @@
     distanceMiles,
     sortStoresByDistance,
     resolveLocation,
+    geocode,
     generateSlots,
     formatPickupWhen,
     minSelectableDate,

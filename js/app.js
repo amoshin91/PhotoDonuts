@@ -675,6 +675,11 @@
 
     inner += renderMap(selected, p.location);
 
+    // distance to the nearest store for whatever location was entered
+    if (p.location && stores.length && stores[0].distance != null) {
+      inner += `<p class="field-note" style="margin:0 0 .2rem">Nearest: <strong>${escapeHtml(stores[0].name)}</strong> — ${stores[0].distance.toFixed(1)} mi from ${escapeHtml(p.locationLabel || "your location")}</p>`;
+    }
+
     const pin = `<span class="store-card__pin"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg></span>`;
 
     // dropdown of nearby stores below the map (scales to any number of stores)
@@ -990,11 +995,20 @@
     if (place) place.addEventListener("click", placeOrder);
   }
 
-  function doLocationSearch(value) {
-    const loc = Pickup.resolveLocation(value);
-    if (!loc) { toast("Couldn't find that — try a zip like 94110 or a city.", true); return; }
+  async function doLocationSearch(value) {
+    const q = (value || "").trim();
+    if (!q) return;
+    const btn = $("#locSearch");
+    if (btn) { btn.disabled = true; btn.textContent = "Searching…"; }
+    let loc = null;
+    try { loc = await Pickup.geocode(q); } catch (e) { loc = null; }
+    if (!loc) {
+      if (btn) { btn.disabled = false; btn.textContent = "Search"; }
+      toast("Couldn't find that location — try another zip, city, or address.", true);
+      return;
+    }
     state.pickup.location = { lat: loc.lat, lng: loc.lng };
-    state.pickup.locationLabel = loc.label || value;
+    state.pickup.locationLabel = loc.label || q;
     renderDrawer();
   }
   function doGeolocate() {
