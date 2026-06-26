@@ -77,7 +77,7 @@
     },
     {
       id: "cake-ring",
-      name: "Cake Ring",
+      name: "Vanilla Ring",
       base: "ring",
       dough: "#D9A85C",
       doughShade: "#B07F36",
