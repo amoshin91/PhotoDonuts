@@ -498,8 +498,13 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.
 .store-open { color: var(--ok); font-weight: 600; }
 .store-closed { color: var(--warn); font-weight: 600; }
 
-.map-frame { width: 100%; aspect-ratio: 16/10; border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line); margin-bottom: 0.8rem; background: var(--cream-2); }
+.map-frame { position: relative; width: 100%; aspect-ratio: 16/10; border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line); margin-bottom: 0.8rem; background: var(--cream-2); }
 .map-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+/* Leaflet map fills the frame */
+.store-map { position: absolute; inset: 0; }
+.leaflet-container { background: var(--cream-2); font: inherit; }
+.leaflet-popup-content { font-size: 0.82rem; line-height: 1.35; }
+.leaflet-container a.leaflet-popup-close-button { color: var(--ink-soft); }
 .map-static { width: 100%; height: 100%; position: relative; display: grid; place-items: center; background:
   repeating-linear-gradient(0deg, transparent 0 26px, rgba(0,0,0,0.03) 26px 27px),
   repeating-linear-gradient(90deg, transparent 0 26px, rgba(0,0,0,0.03) 26px 27px),

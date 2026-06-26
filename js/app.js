@@ -577,6 +577,7 @@
   }
   function closeDrawer() {
     captureCheckoutInputs();
+    destroyStoreMap();
     $("#drawerOverlay").classList.remove("is-open");
     $("#orderDrawer").classList.remove("is-open");
     document.body.classList.remove("no-scroll");
@@ -596,6 +597,7 @@
   }
 
   function renderDrawer() {
+    destroyStoreMap(); // tear down any prior map before the body is replaced
     if (state.placed) { renderConfirmation(); return; }
     captureCheckoutInputs();
     const body = $("#drawerBody");
@@ -618,6 +620,7 @@
       renderTotalsSection();
 
     bindDrawer();
+    initStoreMap(); // mount the Leaflet map into the freshly-rendered map slot
   }
 
   function renderCartSection() {
@@ -724,7 +727,12 @@
       const q = `${selected.lat},${selected.lng}`;
       return `<div class="map-frame"><iframe loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Map of ${escapeHtml(selected.name)}" src="https://www.google.com/maps/embed/v1/place?key=${key}&q=${q}&zoom=14"></iframe></div>`;
     }
-    // graceful static fallback (no key required to run the demo)
+    // free interactive map (Leaflet + OpenStreetMap, no API key) — markers are
+    // added by initStoreMap() after this HTML is in the DOM
+    if (typeof L !== "undefined") {
+      return `<div class="map-frame"><div id="storeMap" class="store-map" role="img" aria-label="Map of nearby stores"></div></div>`;
+    }
+    // graceful static fallback (no key, Leaflet unavailable e.g. offline)
     const label = selected ? selected.name : loc ? "Stores near you" : "Find a store to see it on the map";
     return `
       <div class="map-frame"><div class="map-static">
@@ -733,6 +741,54 @@
         </span>
         <span class="map-static__note">${escapeHtml(label)}</span>
       </div></div>`;
+  }
+
+  // ---- free interactive map (Leaflet + OpenStreetMap tiles) ---------------
+  let _storeMap = null;
+  function destroyStoreMap() {
+    if (_storeMap) { try { _storeMap.remove(); } catch (e) {} _storeMap = null; }
+  }
+  function initStoreMap() {
+    destroyStoreMap();
+    const el = document.getElementById("storeMap");
+    if (!el || typeof L === "undefined") return;
+    const p = state.pickup;
+    const stores = Pickup.sortStoresByDistance(p.location);
+    const map = L.map(el, { scrollWheelZoom: false });
+    _storeMap = map;
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    const pts = [];
+    stores.forEach((s) => {
+      const isSel = s.id === p.storeId;
+      const marker = L.marker([s.lat, s.lng], { opacity: isSel ? 1 : 0.82 }).addTo(map);
+      const dist = s.distance != null ? ` · ${s.distance.toFixed(1)} mi` : "";
+      marker.bindPopup(`<strong>${escapeHtml(s.name)}</strong><br>${escapeHtml(s.address)}${dist}`);
+      marker.on("click", () => {
+        state.pickup.storeId = s.id;
+        state.pickup.dateStr = null;
+        state.pickup.slotHm = null;
+        renderDrawer();
+      });
+      if (isSel) marker.openPopup();
+      pts.push([s.lat, s.lng]);
+    });
+
+    if (p.location) {
+      L.circleMarker([p.location.lat, p.location.lng], { radius: 7, weight: 2, color: "#fff", fillColor: "#d6336c", fillOpacity: 1 })
+        .addTo(map).bindPopup("Your location");
+      pts.push([p.location.lat, p.location.lng]);
+    }
+
+    const sel = stores.find((s) => s.id === p.storeId);
+    if (sel) map.setView([sel.lat, sel.lng], 13);
+    else if (pts.length) map.fitBounds(pts, { padding: [28, 28], maxZoom: 13 });
+    else map.setView([40.78, -73.47], 10); // Long Island default
+    // the drawer animates in; recompute size once layout has settled
+    setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 90);
   }
 
   function renderDateTime(store) {
