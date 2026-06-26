@@ -193,99 +193,83 @@
       : null;
   }
 
+  // Dunkin' — Long Island, NY (Eastern time). lat/lng are approximate; swap for
+  // exact geocoded coordinates when wiring a real geocoder. Hours are typical
+  // Dunkin' hours (placeholders — edit per store as needed).
   const STORES = [
     {
-      id: "sf-ferry",
-      name: "Glaze & Co. — Ferry Building",
-      address: "1 Ferry Building, San Francisco, CA 94111",
-      lat: 37.7955,
-      lng: -122.3937,
-      timezone: "America/Los_Angeles",
-      phone: "(415) 555-0142",
+      id: "dunkin-342238",
+      name: "Dunkin' #342238",
+      address: "726 Old Bethpage Road, Old Bethpage, NY 11804",
+      lat: 40.7611,
+      lng: -73.4549,
+      timezone: "America/New_York",
+      phone: "(516) 555-0142",
       hours: [
-        { open: "08:00", close: "15:00", cutoff: "14:00" }, // Sun
-        { open: "06:30", close: "18:00", cutoff: "17:00" }, // Mon
-        { open: "06:30", close: "18:00", cutoff: "17:00" }, // Tue
-        { open: "06:30", close: "18:00", cutoff: "17:00" }, // Wed
-        { open: "06:30", close: "18:00", cutoff: "17:00" }, // Thu
-        { open: "06:30", close: "19:00", cutoff: "18:00" }, // Fri
-        { open: "07:00", close: "19:00", cutoff: "18:00" }, // Sat
-      ],
-      blackoutDates: ["2026-07-04", "2026-12-25", "2026-01-01"],
-    },
-    {
-      id: "sf-mission",
-      name: "Glaze & Co. — Mission District",
-      address: "2841 Mission St, San Francisco, CA 94110",
-      lat: 37.7515,
-      lng: -122.4181,
-      timezone: "America/Los_Angeles",
-      phone: "(415) 555-0188",
-      hours: [
-        { open: "08:00", close: "14:00", cutoff: "13:00" },
-        { open: "07:00", close: "17:00", cutoff: "16:00" },
-        { open: "07:00", close: "17:00", cutoff: "16:00" },
-        { open: "07:00", close: "17:00", cutoff: "16:00" },
-        { open: "07:00", close: "17:00", cutoff: "16:00" },
-        { open: "07:00", close: "18:00", cutoff: "17:00" },
-        { open: "08:00", close: "18:00", cutoff: "17:00" },
+        { open: "06:00", close: "20:00", cutoff: "19:00" }, // Sun
+        { open: "05:00", close: "21:00", cutoff: "20:00" }, // Mon
+        { open: "05:00", close: "21:00", cutoff: "20:00" }, // Tue
+        { open: "05:00", close: "21:00", cutoff: "20:00" }, // Wed
+        { open: "05:00", close: "21:00", cutoff: "20:00" }, // Thu
+        { open: "05:00", close: "21:00", cutoff: "20:00" }, // Fri
+        { open: "05:00", close: "21:00", cutoff: "20:00" }, // Sat
       ],
       blackoutDates: ["2026-07-04", "2026-12-25"],
     },
     {
-      id: "oak-temescal",
-      name: "Glaze & Co. — Oakland Temescal",
-      address: "4905 Telegraph Ave, Oakland, CA 94609",
-      lat: 37.8358,
-      lng: -122.2636,
-      timezone: "America/Los_Angeles",
-      phone: "(510) 555-0177",
-      hours: [
-        null, // closed Sundays
-        { open: "07:00", close: "16:00", cutoff: "15:00" },
-        { open: "07:00", close: "16:00", cutoff: "15:00" },
-        { open: "07:00", close: "16:00", cutoff: "15:00" },
-        { open: "07:00", close: "16:00", cutoff: "15:00" },
-        { open: "07:00", close: "17:00", cutoff: "16:00" },
-        { open: "08:00", close: "17:00", cutoff: "16:00" },
-      ],
-      blackoutDates: ["2026-07-04", "2026-11-26"],
-    },
-    {
-      id: "nyc-flatiron",
-      name: "Glaze & Co. — NYC Flatiron",
-      address: "31 W 21st St, New York, NY 10010",
-      lat: 40.7411,
-      lng: -73.99,
+      id: "dunkin-346976",
+      name: "Dunkin' #346976",
+      address: "156 Manetto Hill Road, Plainview, NY 11803",
+      lat: 40.7889,
+      lng: -73.4742,
       timezone: "America/New_York",
-      phone: "(212) 555-0123",
+      phone: "(516) 555-0188",
       hours: [
-        { open: "08:00", close: "16:00", cutoff: "15:00" },
-        { open: "06:00", close: "19:00", cutoff: "18:00" },
-        { open: "06:00", close: "19:00", cutoff: "18:00" },
-        { open: "06:00", close: "19:00", cutoff: "18:00" },
-        { open: "06:00", close: "19:00", cutoff: "18:00" },
         { open: "06:00", close: "20:00", cutoff: "19:00" },
-        { open: "07:00", close: "20:00", cutoff: "19:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
       ],
-      blackoutDates: ["2026-07-04", "2026-12-25", "2026-01-01"],
+      blackoutDates: ["2026-07-04", "2026-12-25"],
     },
     {
-      id: "chi-loop",
-      name: "Glaze & Co. — Chicago Loop",
-      address: "200 N LaSalle St, Chicago, IL 60601",
-      lat: 41.8858,
-      lng: -87.6324,
-      timezone: "America/Chicago",
-      phone: "(312) 555-0166",
+      id: "dunkin-345764",
+      name: "Dunkin' #345764",
+      address: "1105 Horseblock Road, Farmingville, NY 11738",
+      lat: 40.8342,
+      lng: -73.0106,
+      timezone: "America/New_York",
+      phone: "(631) 555-0177",
       hours: [
-        null,
-        { open: "06:30", close: "17:00", cutoff: "16:00" },
-        { open: "06:30", close: "17:00", cutoff: "16:00" },
-        { open: "06:30", close: "17:00", cutoff: "16:00" },
-        { open: "06:30", close: "17:00", cutoff: "16:00" },
-        { open: "06:30", close: "18:00", cutoff: "17:00" },
-        { open: "08:00", close: "16:00", cutoff: "15:00" },
+        { open: "06:00", close: "20:00", cutoff: "19:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+      ],
+      blackoutDates: ["2026-07-04", "2026-12-25"],
+    },
+    {
+      id: "dunkin-302334",
+      name: "Dunkin' #302334",
+      address: "1068 Old Country Road, Plainview, NY 11803",
+      lat: 40.7763,
+      lng: -73.4771,
+      timezone: "America/New_York",
+      phone: "(516) 555-0133",
+      hours: [
+        { open: "06:00", close: "20:00", cutoff: "19:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
+        { open: "05:00", close: "21:00", cutoff: "20:00" },
       ],
       blackoutDates: ["2026-07-04", "2026-12-25"],
     },
@@ -296,17 +280,18 @@
      out of the box. In production, swap resolveLocation() for a real
      geocoding call (Google Geocoding API / Places). */
   const GEO_LOOKUP = {
-    "94111": { lat: 37.7955, lng: -122.3937, label: "San Francisco, CA 94111" },
-    "94110": { lat: 37.7515, lng: -122.4181, label: "San Francisco, CA 94110" },
-    "94609": { lat: 37.8358, lng: -122.2636, label: "Oakland, CA 94609" },
-    "10010": { lat: 40.7411, lng: -73.99, label: "New York, NY 10010" },
-    "60601": { lat: 41.8858, lng: -87.6324, label: "Chicago, IL 60601" },
-    "san francisco": { lat: 37.7749, lng: -122.4194, label: "San Francisco, CA" },
-    "oakland": { lat: 37.8044, lng: -122.2712, label: "Oakland, CA" },
-    "berkeley": { lat: 37.8715, lng: -122.273, label: "Berkeley, CA" },
+    "11804": { lat: 40.7611, lng: -73.4549, label: "Old Bethpage, NY 11804" },
+    "11803": { lat: 40.7826, lng: -73.4754, label: "Plainview, NY 11803" },
+    "11738": { lat: 40.8342, lng: -73.0106, label: "Farmingville, NY 11738" },
+    "11801": { lat: 40.7684, lng: -73.5251, label: "Hicksville, NY 11801" },
+    "11714": { lat: 40.744, lng: -73.4868, label: "Bethpage, NY 11714" },
+    "old bethpage": { lat: 40.7611, lng: -73.4549, label: "Old Bethpage, NY" },
+    "plainview": { lat: 40.7765, lng: -73.4673, label: "Plainview, NY" },
+    "farmingville": { lat: 40.8342, lng: -73.0106, label: "Farmingville, NY" },
+    "hicksville": { lat: 40.7684, lng: -73.5251, label: "Hicksville, NY" },
+    "bethpage": { lat: 40.744, lng: -73.4868, label: "Bethpage, NY" },
+    "long island": { lat: 40.7891, lng: -73.469, label: "Long Island, NY" },
     "new york": { lat: 40.7128, lng: -74.006, label: "New York, NY" },
-    "brooklyn": { lat: 40.6782, lng: -73.9442, label: "Brooklyn, NY" },
-    "chicago": { lat: 41.8781, lng: -87.6298, label: "Chicago, IL" },
   };
 
   /* Set this to a valid key to enable the live Google Map + markers.
