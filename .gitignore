@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# logs / scratch
+*.log
+
+# dependencies (not used today, but ignored for the future)
+node_modules/

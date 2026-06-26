@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#fbf7f0" />
+  <title>Glaze &amp; Co. — Build Your Dozen</title>
+  <meta name="description" content="Design your perfect dozen donuts and reserve in-store pickup." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23f4ecd9' stroke='%23e8b873' stroke-width='8'/><circle cx='50' cy='50' r='14' fill='white'/></svg>" />
+</head>
+<body>
+  <a class="skip-link" href="#builder">Skip to donut builder</a>
+
+  <!-- ============================ HEADER ============================ -->
+  <header class="site-header" id="top">
+    <div class="wrap site-header__inner">
+      <a class="brand" href="#top" aria-label="Glaze and Co. home">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="34" height="34"><circle cx="20" cy="20" r="16" fill="#f4ecd9" stroke="#e8b873" stroke-width="5"/><circle cx="20" cy="20" r="5.5" fill="#fff"/><circle cx="13" cy="14" r="1.5" fill="#e83e8c"/><circle cx="27" cy="16" r="1.5" fill="#1971c2"/><circle cx="24" cy="27" r="1.5" fill="#ffd43b"/></svg>
+        </span>
+        <span class="brand__name">Glaze<span class="brand__amp">&amp;</span>Co.</span>
+      </a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#featured">Boxes</a>
+        <a href="#builder">Build</a>
+        <a href="#how">How it works</a>
+        <a href="#stores">Stores</a>
+      </nav>
+      <button class="cart-button" id="cartButton" aria-haspopup="dialog" aria-controls="orderDrawer">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 4h2l2.4 11.5a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L22 8H6"/><circle cx="10" cy="20" r="1.4" fill="currentColor"/><circle cx="18" cy="20" r="1.4" fill="currentColor"/></svg>
+        <span class="cart-button__label">Order</span>
+        <span class="cart-button__count" id="cartCount" hidden>0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ============================ HERO ============================ -->
+  <section class="hero wrap" aria-labelledby="heroTitle">
+    <div class="hero__copy">
+      <p class="eyebrow">Custom dozen • Made-to-order • Local pickup</p>
+      <h1 id="heroTitle" class="hero__title">Build a dozen<br />that's <em>unmistakably</em> yours.</h1>
+      <p class="hero__sub">Pick a style, dip it, finish it with sprinkles, and watch your box come to life. Reserve pickup at your neighborhood Glaze&nbsp;&amp; Co.</p>
+      <a href="#builder" class="btn btn--primary hero__cta">Start building</a>
+    </div>
+  </section>
+
+  <!-- ============================ FEATURED BOXES ============================ -->
+  <section id="featured" class="featured wrap" aria-labelledby="featuredHeading">
+    <div class="featured__head">
+      <div>
+        <p class="eyebrow">Ready-made &amp; ready to grab</p>
+        <h2 id="featuredHeading" class="section-heading">Boxes for the occasion</h2>
+        <p class="featured__sub">Holidays, game days, and everything worth celebrating — a dozen, designed. Add as-is or make it your own.</p>
+      </div>
+    </div>
+    <div class="featured__grid" id="featuredGrid"><!-- rendered by app.js --></div>
+  </section>
+
+  <!-- ============================ BUILDER ============================ -->
+  <main id="builder" class="builder wrap" aria-labelledby="builderHeading">
+    <h2 id="builderHeading" class="section-heading">Design your donut</h2>
+
+    <div class="builder__grid">
+      <!-- ---------- CONTROL PANEL ---------- -->
+      <form class="controls" id="controls" aria-label="Donut customization">
+
+        <!-- Donut type -->
+        <fieldset class="control-group">
+          <legend class="control-group__title">Donut type <span class="req" aria-hidden="true">required</span></legend>
+          <div class="type-grid" id="typeOptions" role="radiogroup" aria-label="Donut type"></div>
+        </fieldset>
+
+        <!-- Filling (conditional) -->
+        <fieldset class="control-group" id="fillingGroup" hidden>
+          <legend class="control-group__title">Filling</legend>
+          <div class="chip-row" id="fillingOptions" role="radiogroup" aria-label="Filling"></div>
+        </fieldset>
+
+        <!-- Icing -->
+        <fieldset class="control-group">
+          <legend class="control-group__title">Icing <span class="req" aria-hidden="true">required</span></legend>
+          <div class="chip-row" id="icingOptions" role="radiogroup" aria-label="Icing"></div>
+          <div class="accent-block" id="customBlock" hidden>
+            <p class="accent-block__label">
+              <span class="accent-block__badge accent-block__badge--custom">Custom</span>
+              Swirl it tie-dye, or pick a single tint
+            </p>
+            <div class="style-row">
+              <button type="button" class="style-btn" id="tieDyeBtn" aria-pressed="false">
+                <span class="style-btn__swatch style-btn__swatch--tiedye" aria-hidden="true"></span> Tie-dye swirl
+              </button>
+            </div>
+            <div class="swatch-grid" id="tintOptions" role="radiogroup" aria-label="Custom icing tint color"></div>
+          </div>
+        </fieldset>
+
+        <!-- Drizzle -->
+        <fieldset class="control-group">
+          <legend class="control-group__title">
+            Drizzle
+            <span class="title-pills">
+              <span class="badge-soft">Icing lines on top</span>
+              <span class="badge-soft">Optional</span>
+            </span>
+          </legend>
+          <div class="chip-row" id="drizzleOptions" role="radiogroup" aria-label="Drizzle"></div>
+          <div class="accent-block" id="drizzleCustomBlock" hidden>
+            <p class="accent-block__label">
+              <span class="accent-block__badge accent-block__badge--custom">Custom</span>
+              Pick a drizzle color
+            </p>
+            <div class="swatch-grid" id="drizzleTintOptions" role="radiogroup" aria-label="Custom drizzle color"></div>
+          </div>
+        </fieldset>
+
+        <!-- Sprinkles -->
+        <fieldset class="control-group">
+          <legend class="control-group__title">
+            Sprinkles
+            <span class="badge-soft" id="sprinkleFreeBadge">First color free</span>
+            <span class="count-meta" id="sprinkleCounter" aria-label="Sprinkle colors chosen">1/5</span>
+          </legend>
+          <label class="toggle" id="noSprinklesToggle">
+            <input type="checkbox" id="noSprinkles" />
+            <span class="toggle__track" aria-hidden="true"><span class="toggle__thumb"></span></span>
+            <span class="toggle__text">No sprinkles</span>
+          </label>
+          <div class="style-row" id="sprinklePresets">
+            <button type="button" class="style-btn" id="rainbowBtn" aria-pressed="false">
+              <span class="style-btn__swatch style-btn__swatch--rainbow" aria-hidden="true"></span> Rainbow
+            </button>
+            <button type="button" class="style-btn" id="chocBtn" aria-pressed="false">
+              <span class="style-btn__swatch" style="background:#4A1F0A" aria-hidden="true"></span> Chocolate
+            </button>
+          </div>
+          <div class="swatch-grid" id="sprinkleOptions" role="group" aria-label="Sprinkle colors (up to 4)"></div>
+          <div class="style-row" id="sprinkleMods" hidden>
+            <span class="style-row__label">Finish:</span>
+            <button type="button" class="style-btn" id="heavyBtn" aria-pressed="false">Extra heavy</button>
+            <button type="button" class="style-btn" id="halfBtn" aria-pressed="false">Half top</button>
+          </div>
+          <p class="field-note" id="sprinkleNote" aria-live="polite"></p>
+        </fieldset>
+      </form>
+
+      <!-- ---------- STAGE (preview + grid + price) ---------- -->
+      <div class="stage">
+        <div class="stage__sticky">
+          <div class="preview-card">
+            <div class="preview-card__halo" aria-hidden="true"></div>
+            <div class="preview-hero" id="previewHero" aria-live="polite"></div>
+            <p class="preview-caption" id="previewCaption"></p>
+          </div>
+
+          <div class="dozen">
+            <div class="dozen__head">
+              <h3 class="dozen__title">Your dozen</h3>
+              <span class="dozen__note">All 12 identical</span>
+            </div>
+            <div class="dozen__grid" id="dozenGrid" aria-label="Preview of all 12 donuts in the box"></div>
+          </div>
+
+          <div class="price-bar">
+            <div class="price-bar__info">
+              <span class="price-bar__label">Box total</span>
+              <span class="price-bar__amount" id="boxPrice">$0.00</span>
+            </div>
+            <button class="btn btn--primary price-bar__add" id="addToCart">Add box to order</button>
+          </div>
+          <div class="breakdown" id="breakdownPanel"></div>
+          <p class="allergen-summary" id="allergenSummary"></p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============================ HOW IT WORKS ============================ -->
+  <section id="how" class="how wrap" aria-labelledby="howHeading">
+    <h2 id="howHeading" class="section-heading">How pickup works</h2>
+    <ol class="how__steps">
+      <li class="how__step"><span class="how__num">1</span><h3>Design every box</h3><p>Each box is a custom dozen. Add as many designs as you like — minimum one dozen.</p></li>
+      <li class="how__step"><span class="how__num">2</span><h3>Choose a store</h3><p>Find your nearest Glaze&nbsp;&amp; Co. by location and pick a 30-minute pickup window.</p></li>
+      <li class="how__step"><span class="how__num">3</span><h3>Pay &amp; pick up</h3><p>Check out online, then grab your fresh dozens at the counter. We'll text and email you.</p></li>
+    </ol>
+  </section>
+
+  <!-- ============================ ORDER DRAWER ============================ -->
+  <div class="drawer-overlay" id="drawerOverlay" hidden></div>
+  <aside class="drawer" id="orderDrawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+    <div class="drawer__head">
+      <h2 id="drawerTitle" class="drawer__title">Your order</h2>
+      <button class="icon-btn" id="closeDrawer" aria-label="Close order panel">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="drawer__body" id="drawerBody"><!-- rendered by app.js --></div>
+  </aside>
+
+  <!-- ============================ FOOTER ============================ -->
+  <footer id="stores" class="site-footer">
+    <div class="wrap site-footer__inner">
+      <div>
+        <span class="brand__name brand__name--footer">Glaze<span class="brand__amp">&amp;</span>Co.</span>
+        <p class="site-footer__tag">Small-batch donuts, built your way.</p>
+      </div>
+      <div class="site-footer__stores" id="footerStores"></div>
+    </div>
+    <p class="site-footer__legal">Prices, hours, and availability shown are placeholders for demonstration. Allergen information is illustrative — confirm in store.</p>
+  </footer>
+
+  <!-- toast region -->
+  <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- scripts (plain scripts so it runs over file://) -->
+  <script src="js/config.js"></script>
+  <script src="js/donut-svg.js"></script>
+  <script src="js/pricing.js"></script>
+  <script src="js/pickup.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
