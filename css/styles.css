@@ -358,7 +358,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.
 .field-note--warn { color: var(--warn); font-weight: 500; }
 
 /* -------------------------------- Stage ---------------------------------- */
-.stage__sticky { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.1rem; }
+.stage__sticky { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.1rem; align-content: start; }
+.stage__pinned { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.1rem; }
 .preview-card {
   position: relative; background: linear-gradient(170deg, #fff, var(--cream)); border: 1px solid var(--line);
   border-radius: var(--r-lg); padding: 1.5rem; box-shadow: var(--sh-2); overflow: hidden;
@@ -377,9 +378,22 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.
 
 /* dozen grid */
 .dozen { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 1.1rem 1.2rem 1.3rem; box-shadow: var(--sh-1); }
-.dozen__head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.8rem; }
-.dozen__title { font-size: 1.05rem; }
+.dozen__head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.8rem; }
+.dozen__title { font-size: 1.05rem; margin-right: auto; }
 .dozen__note { font-size: 0.76rem; color: var(--ink-faint); font-weight: 500; }
+.dozen__toggle {
+  display: inline-flex; align-items: center; gap: 0.3rem; flex: none;
+  background: var(--cream); border: 1px solid var(--line); color: var(--ink-soft);
+  font: inherit; font-size: 0.74rem; font-weight: 600; line-height: 1;
+  padding: 0.3rem 0.55rem; border-radius: 999px; cursor: pointer;
+  transition: background var(--t), color var(--t);
+}
+.dozen__toggle:hover { background: var(--cream-2); color: var(--ink); }
+.dozen__toggle:focus-visible { outline: 3px solid var(--berry); outline-offset: 2px; }
+.dozen__chev { transition: transform var(--t) var(--ease); }
+.dozen--collapsed .dozen__chev { transform: rotate(-90deg); }
+.dozen--collapsed .dozen__head { margin-bottom: 0; }
+.dozen--collapsed .dozen__grid { display: none; }
 .dozen__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
 .dozen__cell {
   aspect-ratio: 1; background: radial-gradient(circle at 50% 42%, #fff, var(--cream-2));
@@ -611,9 +625,27 @@ body.no-scroll { overflow: hidden; }
 }
 @media (min-width: 980px) {
   :root { --header-h: 72px; }
-  .builder__grid { grid-template-columns: minmax(0, 1fr) minmax(380px, 460px); align-items: start; }
+  .builder__grid { grid-template-columns: minmax(0, 1fr) minmax(380px, 460px); align-items: stretch; }
   .type-grid { grid-template-columns: repeat(2, 1fr); }
-  .stage__sticky { position: sticky; top: calc(var(--header-h) + 1rem); }
+  /* Right column fills the full builder height so the summary can stay
+     pinned for the entire scroll, regardless of which column is taller. */
+  .stage { display: flex; flex-direction: column; }
+  .stage__sticky { flex: 1 1 auto; }
+  /* Preview + 12-box + price pin together as one unit (no overlap). The
+     detailed breakdown + allergen note scroll normally below it. Capped to the
+     viewport with an internal-scroll safety valve so the price is never clipped
+     on short screens. */
+  .stage__pinned {
+    position: sticky; top: calc(var(--header-h) + 1rem); z-index: 2;
+    align-content: start; gap: 0.85rem;
+  }
+  /* The hero donut keeps its full size at every viewport. Instead, the 12-box
+     stays compact and collapses (via app.js) when the viewport is too short to
+     show every section at full height. */
+  .dozen { padding: 0.8rem 0.9rem 0.9rem; }
+  .dozen__head { margin-bottom: 0.55rem; }
+  .dozen--collapsed .dozen__head { margin-bottom: 0; }
+  .dozen__grid { gap: 0.38rem; max-width: 280px; margin-inline: auto; }
 }
 @media (min-width: 1140px) {
   .type-grid { grid-template-columns: repeat(2, 1fr); }

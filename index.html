@@ -152,29 +152,35 @@
       <!-- ---------- STAGE (preview + grid + price) ---------- -->
       <div class="stage">
         <div class="stage__sticky">
-          <div class="preview-card">
-            <div class="preview-card__halo" aria-hidden="true"></div>
-            <div class="preview-hero" id="previewHero" aria-live="polite"></div>
-            <p class="preview-caption" id="previewCaption"></p>
-          </div>
-
-          <div class="dozen">
-            <div class="dozen__head">
-              <h3 class="dozen__title">Your dozen</h3>
-              <span class="dozen__note">All 12 identical</span>
+          <div class="stage__pinned">
+            <div class="preview-card">
+              <div class="preview-card__halo" aria-hidden="true"></div>
+              <div class="preview-hero" id="previewHero" aria-live="polite"></div>
+              <p class="preview-caption" id="previewCaption"></p>
             </div>
-            <div class="dozen__grid" id="dozenGrid" aria-label="Preview of all 12 donuts in the box"></div>
-          </div>
 
-          <div class="price-bar">
-            <div class="price-bar__info">
-              <span class="price-bar__label">Box total</span>
-              <span class="price-bar__amount" id="boxPrice">$0.00</span>
+            <div class="dozen" id="dozenSection">
+              <div class="dozen__head">
+                <h3 class="dozen__title">Your dozen</h3>
+                <span class="dozen__note">All 12 identical</span>
+                <button type="button" class="dozen__toggle" id="dozenToggle" aria-expanded="true" aria-controls="dozenGrid">
+                  <span class="dozen__toggle-text">Hide</span>
+                  <svg class="dozen__chev" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </div>
+              <div class="dozen__grid" id="dozenGrid" aria-label="Preview of all 12 donuts in the box"></div>
             </div>
-            <button class="btn btn--primary price-bar__add" id="addToCart">Add box to order</button>
+
+            <div class="price-bar">
+              <div class="price-bar__info">
+                <span class="price-bar__label">Box total</span>
+                <span class="price-bar__amount" id="boxPrice">$0.00</span>
+              </div>
+              <button class="btn btn--primary price-bar__add" id="addToCart">Add box to order</button>
+            </div>
+            <div class="breakdown" id="breakdownPanel"></div>
+            <p class="allergen-summary" id="allergenSummary"></p>
           </div>
-          <div class="breakdown" id="breakdownPanel"></div>
-          <p class="allergen-summary" id="allergenSummary"></p>
         </div>
       </div>
     </div>

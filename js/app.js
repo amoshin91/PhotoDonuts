@@ -360,6 +360,7 @@
     renderPrice();
     renderBreakdown();
     renderAllergens();
+    autoManageDozen();
   }
 
   function syncUI() {
@@ -477,6 +478,47 @@
       html += `<div class="dozen__cell" style="animation-delay:${i * 22}ms">${svg}</div>`;
     }
     grid.innerHTML = html;
+  }
+
+  /* ----------------------- dozen collapse (12-box) ----------------------- *
+   * The hero donut always shows at full size. When the sticky column can't
+   * fit every section at full height, the 12-box is auto-collapsed to make
+   * room. A manual toggle is also available; once the user clicks it, we stop
+   * auto-managing and respect their choice. */
+  let dozenUserSet = false;
+
+  function dozenIsCollapsed() {
+    const sec = $("#dozenSection");
+    return !!sec && sec.classList.contains("dozen--collapsed");
+  }
+
+  function setDozenCollapsed(collapsed) {
+    const sec = $("#dozenSection");
+    const toggle = $("#dozenToggle");
+    if (!sec || !toggle) return;
+    sec.classList.toggle("dozen--collapsed", collapsed);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    const txt = toggle.querySelector(".dozen__toggle-text");
+    if (txt) txt.textContent = collapsed ? "Show" : "Hide";
+  }
+
+  function autoManageDozen() {
+    if (dozenUserSet) return;
+    const pinned = $(".stage__pinned");
+    if (!pinned || getComputedStyle(pinned).position !== "sticky") {
+      // stacked / mobile layout — nothing is pinned, so keep the box open
+      setDozenCollapsed(false);
+      return;
+    }
+    // Expand first to measure the natural (uncompressed) full height, then
+    // collapse the 12-box only if every section can't fit in the viewport at
+    // full size. Reading layout between class writes forces a synchronous
+    // reflow but no paint, so there is no visible flash.
+    setDozenCollapsed(false);
+    const topOffset = parseFloat(getComputedStyle(pinned).top) || 0;
+    const available = window.innerHeight - topOffset - 16; // small bottom gap
+    const needed = pinned.scrollHeight;
+    if (needed > available) setDozenCollapsed(true);
   }
 
   function renderPrice() {
@@ -1277,6 +1319,18 @@
     // sprinkle finish modifiers
     $("#heavyBtn").addEventListener("click", () => { state.design.heavySprinkles = !state.design.heavySprinkles; update(); });
     $("#halfBtn").addEventListener("click", () => { state.design.halfSprinkles = !state.design.halfSprinkles; update(); });
+
+    // 12-box collapse: manual toggle disables auto-management thereafter
+    $("#dozenToggle").addEventListener("click", () => {
+      dozenUserSet = true;
+      setDozenCollapsed(!dozenIsCollapsed());
+    });
+    let dozenResizeT;
+    window.addEventListener("resize", () => {
+      clearTimeout(dozenResizeT);
+      dozenResizeT = setTimeout(autoManageDozen, 150);
+    });
+    window.addEventListener("load", autoManageDozen);
 
     $("#addToCart").addEventListener("click", addOrUpdateBox);
     $("#cartButton").addEventListener("click", () => { openDrawer(); renderDrawer(); });

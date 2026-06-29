@@ -37,8 +37,8 @@
 
   // ---- geometry presets per base family ------------------------------------
   const GEO = {
-    ring: { outerR: 86, holeR: 27, icingR: 79, icingHoleR: 33, sprMin: 41, sprMax: 72 },
-    shell: { outerR: 86, holeR: 0, icingR: 81, icingHoleR: 0, sprMin: 0, sprMax: 71 },
+    ring: { outerR: 86, holeR: 27, icingR: 79, icingHoleR: 33, sprMin: 37, sprMax: 75 },
+    shell: { outerR: 86, holeR: 0, icingR: 81, icingHoleR: 0, sprMin: 0, sprMax: 76 },
   };
 
   function polar(r, a) {

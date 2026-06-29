@@ -135,7 +135,7 @@
   // Sprinkle style presets / modifiers (no extra charge — they're finishes).
   const RAINBOW_SPRINKLE_IDS = ["hot-pink", "yellow", "blue", "green", "purple", "orange", "red"];
   const CHOCOLATE_SPRINKLE_HEX = "#4A1F0A";
-  const SPRINKLE_DENSITY = { normal: 360, heavy: 560 }; // jimmies drawn per donut
+  const SPRINKLE_DENSITY = { normal: 300, heavy: 470 }; // jimmies drawn per donut
   const TIE_DYE_COLORS = ["#F687B3", "#F6D25C", "#5FA8F5", "#56C596", "#A78BFA", "#F6A35C"];
 
   /* ------------------------- PREMADE / SEASONAL BOXES ---------------------
