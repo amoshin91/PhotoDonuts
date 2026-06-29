@@ -256,13 +256,13 @@
       const count = design.heavySprinkles ? DB.SPRINKLE_DENSITY.heavy : DB.SPRINKLE_DENSITY.normal;
       const sprinkles = buildSprinkles(geo, count, design.halfSprinkles);
       const colorRng = mulberry32(FIXED_SEED ^ 0xc0ffee); // stable colors, independent of position
-      const len = 4.4, w = 1.7;
+      const len = 6.0, w = 2.3;
       svg += `<g>`;
       for (const s of sprinkles) {
         const hex = design.rainbowColors
           ? sprinkleHexes[Math.floor(colorRng() * sprinkleHexes.length)]
           : sprinkleHexes[s.idx % sprinkleHexes.length];
-        svg += `<rect x="${(s.x - len / 2).toFixed(2)}" y="${(s.y - w / 2).toFixed(2)}" width="${len}" height="${w}" rx="0.8" fill="${hex}" transform="rotate(${s.rot.toFixed(1)} ${s.x.toFixed(2)} ${s.y.toFixed(2)})"/>`;
+        svg += `<rect x="${(s.x - len / 2).toFixed(2)}" y="${(s.y - w / 2).toFixed(2)}" width="${len}" height="${w}" rx="1.1" fill="${hex}" transform="rotate(${s.rot.toFixed(1)} ${s.x.toFixed(2)} ${s.y.toFixed(2)})"/>`;
       }
       svg += `</g>`;
     }
