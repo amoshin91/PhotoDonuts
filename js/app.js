@@ -40,6 +40,38 @@
 
   let nextBoxId = 1;
 
+  /* --------------------- PERSISTENCE (localStorage) ---------------------- */
+  /* Cart + pickup + checkout survive navigation to the separate checkout page
+     (and a page refresh). The in-progress builder design is NOT persisted. */
+  const LS_KEY = "glaze_order_v1";
+  function persist() {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        boxes: state.cart.boxes, nextBoxId, pickup: state.pickup, checkout: state.checkout,
+      }));
+    } catch (e) {}
+  }
+  function loadPersisted() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (Array.isArray(d.boxes)) state.cart.boxes = d.boxes;
+      if (typeof d.nextBoxId === "number") nextBoxId = d.nextBoxId;
+      if (d.pickup) state.pickup = Object.assign(state.pickup, d.pickup);
+      if (d.checkout) state.checkout = Object.assign(state.checkout, d.checkout);
+    } catch (e) {}
+  }
+  function clearPersisted() { try { localStorage.removeItem(LS_KEY); } catch (e) {} }
+
+  // The active order panel: the checkout page's main column, or the cart drawer.
+  function panelRoot() { return document.getElementById("checkoutMain") || document.getElementById("drawerBody"); }
+  // Re-render whichever panel is showing.
+  function refreshPanel() {
+    if (document.getElementById("checkoutMain")) renderCheckoutPage();
+    else renderDrawer();
+  }
+
   /* --------------------------- DESIGN HELPERS ---------------------------- */
   function activeIcing(d) { return DB.ICINGS.find((i) => i.id === d.icingId); }
   function activeType(d) { return DB.DONUT_TYPES.find((t) => t.id === d.typeId); }
@@ -579,28 +611,28 @@
     if (!box) return;
     state.cart.boxes.push({ id: nextBoxId++, design: JSON.parse(JSON.stringify(box.design)), qty: 1 });
     syncCartCount();
-    renderDrawer();
+    refreshPanel();
     toast("Box duplicated");
   }
   function removeBox(id) {
     state.cart.boxes = state.cart.boxes.filter((b) => b.id !== id);
     syncCartCount();
-    renderDrawer();
+    refreshPanel();
   }
   function changeQty(id, delta) {
     const box = state.cart.boxes.find((b) => b.id === id);
     if (!box) return;
     box.qty = Math.max(1, box.qty + delta);
     syncCartCount();
-    renderDrawer();
+    refreshPanel();
   }
 
   function dozenCount() { return state.cart.boxes.reduce((s, b) => s + b.qty, 0); }
   function syncCartCount() {
     const n = dozenCount();
     const badge = $("#cartCount");
-    badge.textContent = n;
-    badge.hidden = n === 0;
+    if (badge) { badge.textContent = n; badge.hidden = n === 0; }
+    persist();
   }
   function expandedBoxes() { return state.cart.boxes.flatMap((b) => Array(b.qty).fill(b)); }
 
@@ -631,18 +663,21 @@
   }
 
   function captureCheckoutInputs() {
-    const body = $("#drawerBody");
+    const body = panelRoot();
+    if (!body) return;
     const name = $("#coName", body); if (name) state.checkout.name = name.value;
     const email = $("#coEmail", body); if (email) state.checkout.email = email.value;
     const phone = $("#coPhone", body); if (phone) state.checkout.phone = phone.value;
     const consent = $("#coConsent", body); if (consent) state.checkout.consent = consent.checked;
+    persist();
   }
 
+  // The cart drawer now holds ONLY what's in the cart, plus a Checkout button
+  // that navigates to the dedicated checkout page (pickup + payment).
   function renderDrawer() {
-    destroyStoreMap(); // tear down any prior map before the body is replaced
-    if (state.placed) { renderConfirmation(); return; }
     captureCheckoutInputs();
     const body = $("#drawerBody");
+    if (!body) return;
     if (!state.cart.boxes.length) {
       body.innerHTML = `
         <div class="cart-empty">
@@ -655,21 +690,27 @@
       return;
     }
 
+    const totals = Pricing.priceCart(expandedBoxes());
     body.innerHTML =
-      renderCartSection() +
-      renderPickupSection() +
-      renderCheckoutSection() +
-      renderTotalsSection();
-
-    bindDrawer();
-    initStoreMap(); // mount the Leaflet map into the freshly-rendered map slot
+      renderCartSection({ context: "drawer" }) +
+      `<div class="cart-foot">
+        <div class="cart-foot__row"><span>Subtotal · ${dozenCount()} dozen</span><span>${Pricing.fmt(totals.subtotal)}</span></div>
+        <p class="field-note" style="margin:.25rem 0 .85rem">Tax &amp; pickup are chosen at checkout. Minimum order is 1 dozen.</p>
+        <button class="btn btn--primary btn--block" id="goCheckout">Checkout</button>
+      </div>`;
+    bindCart(body);
   }
 
-  function renderCartSection() {
+  function renderCartSection(opts) {
+    const ctx = (opts && opts.context) || "drawer";
     const rows = state.cart.boxes.map((b) => {
       const resolved = resolveDesign(b.design);
       const svg = DonutSVG.render(resolved, { size: 56, decorative: true });
       const price = Pricing.priceBox(b.design).subtotal;
+      const manage = ctx === "drawer"
+        ? `<button class="link-btn" data-act="edit" data-id="${b.id}">Edit</button>
+           <button class="link-btn link-btn--muted" data-act="dup" data-id="${b.id}">Duplicate</button>`
+        : "";
       return `
         <div class="box-item">
           <div class="box-item__thumb">${svg}</div>
@@ -683,19 +724,22 @@
                 <span class="qty-val" aria-label="Quantity">${b.qty}</span>
                 <button class="qty-btn" data-act="inc" data-id="${b.id}" aria-label="Increase quantity">+</button>
               </span>
-              <button class="link-btn" data-act="edit" data-id="${b.id}">Edit</button>
-              <button class="link-btn link-btn--muted" data-act="dup" data-id="${b.id}">Duplicate</button>
+              ${manage}
               <button class="link-btn link-btn--muted" data-act="rm" data-id="${b.id}">Remove</button>
             </div>
           </div>
           <div class="box-item__price">${Pricing.fmt(price * b.qty)}</div>
         </div>`;
     }).join("");
+    const foot = ctx === "drawer"
+      ? `<button class="btn btn--ghost btn--block" id="addAnother" style="margin-top:.9rem">+ Design another box</button>`
+      : `<a class="link-btn" href="index.html#builder" style="display:inline-block;margin-top:.7rem">← Back to builder to add or edit boxes</a>`;
+    const step = ctx === "drawer" ? "" : `<span class="order-section__step">1</span> `;
     return `
       <section class="order-section">
-        <h3 class="order-section__title"><span class="order-section__step">1</span> Your boxes <span style="margin-left:auto;font-size:.8rem;font-weight:500;color:var(--ink-faint)">${dozenCount()} dozen</span></h3>
+        <h3 class="order-section__title">${step}Your boxes <span style="margin-left:auto;font-size:.8rem;font-weight:500;color:var(--ink-faint)">${dozenCount()} dozen</span></h3>
         ${rows}
-        <button class="btn btn--ghost btn--block" id="addAnother" style="margin-top:.9rem">+ Design another box</button>
+        ${foot}
       </section>`;
   }
 
@@ -818,7 +862,7 @@
         state.pickup.storeId = s.id;
         state.pickup.dateStr = null;
         state.pickup.slotHm = null;
-        renderDrawer();
+        renderCheckoutPage();
       });
       if (isSel) marker.openPopup();
       pts.push([s.lat, s.lng]);
@@ -983,14 +1027,16 @@
       </section>`;
   }
 
-  function bindDrawer() {
-    const body = $("#drawerBody");
-
-    const addAnother = $("#addAnother", body);
+  // Cart actions (qty / edit / duplicate / remove) + footer buttons. Used on
+  // both the cart drawer and the checkout page's order summary.
+  function bindCart(root) {
+    const addAnother = $("#addAnother", root);
     if (addAnother) addAnother.addEventListener("click", () => { closeDrawer(); state.editingBoxId = null; update(); document.getElementById("builder").scrollIntoView({ behavior: "smooth" }); });
 
-    // cart row actions
-    $$(".box-item [data-act]", body).forEach((btn) => {
+    const goCheckout = $("#goCheckout", root);
+    if (goCheckout) goCheckout.addEventListener("click", () => { captureCheckoutInputs(); window.location.href = "checkout.html"; });
+
+    $$(".box-item [data-act]", root).forEach((btn) => {
       btn.addEventListener("click", () => {
         const id = +btn.dataset.id;
         const act = btn.dataset.act;
@@ -1001,40 +1047,65 @@
         else if (act === "rm") removeBox(id);
       });
     });
+  }
 
-    // location
-    const locSearch = $("#locSearch", body);
-    if (locSearch) locSearch.addEventListener("click", () => doLocationSearch($("#locInput", body).value));
-    const locInput = $("#locInput", body);
+  // Pickup + contact/payment controls — checkout page only.
+  function bindCheckoutControls(root) {
+    const locSearch = $("#locSearch", root);
+    if (locSearch) locSearch.addEventListener("click", () => doLocationSearch($("#locInput", root).value));
+    const locInput = $("#locInput", root);
     if (locInput) locInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doLocationSearch(locInput.value); } });
-    const geoBtn = $("#geoBtn", body);
+    const geoBtn = $("#geoBtn", root);
     if (geoBtn) geoBtn.addEventListener("click", doGeolocate);
 
-    // store select (dropdown)
-    const storeSelect = $("#storeSelect", body);
+    const storeSelect = $("#storeSelect", root);
     if (storeSelect) storeSelect.addEventListener("change", () => {
       state.pickup.storeId = storeSelect.value || null;
       state.pickup.dateStr = null;
       state.pickup.slotHm = null;
-      renderDrawer();
+      renderCheckoutPage();
     });
-    // day select
-    $$(".day-chip", body).forEach((chip) => {
+    $$(".day-chip", root).forEach((chip) => {
       if (chip.disabled) return;
-      chip.addEventListener("click", () => { state.pickup.dateStr = chip.dataset.date; state.pickup.slotHm = null; renderDrawer(); });
+      chip.addEventListener("click", () => { state.pickup.dateStr = chip.dataset.date; state.pickup.slotHm = null; renderCheckoutPage(); });
     });
-    // slot select
-    $$(".slot", body).forEach((slot) => {
+    $$(".slot", root).forEach((slot) => {
       if (slot.disabled) return;
-      slot.addEventListener("click", () => { state.pickup.slotHm = slot.dataset.slot; renderDrawer(); });
+      slot.addEventListener("click", () => { state.pickup.slotHm = slot.dataset.slot; renderCheckoutPage(); });
     });
 
-    // checkout mode
-    $$(".seg__btn", body).forEach((b) => b.addEventListener("click", () => { captureCheckoutInputs(); state.checkout.mode = b.dataset.mode; renderDrawer(); }));
+    $$(".seg__btn", root).forEach((b) => b.addEventListener("click", () => { captureCheckoutInputs(); state.checkout.mode = b.dataset.mode; renderCheckoutPage(); }));
 
-    // place order
-    const place = $("#placeOrder", body);
+    const place = $("#placeOrder", root);
     if (place) place.addEventListener("click", placeOrder);
+  }
+
+  /* --------------------------- CHECKOUT PAGE ----------------------------- */
+  // Renders the full pickup + payment flow into #checkoutMain on checkout.html.
+  function renderCheckoutPage() {
+    destroyStoreMap();
+    if (state.placed) { renderConfirmation(); return; }
+    captureCheckoutInputs();
+    const main = $("#checkoutMain");
+    if (!main) return;
+    if (!state.cart.boxes.length) {
+      main.innerHTML = `
+        <div class="cart-empty">
+          <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          <p>Your order is empty.</p>
+          <p style="font-size:.85rem;margin-top:.3rem">Add a dozen before checking out.</p>
+          <a class="btn btn--primary" style="margin-top:1rem" href="index.html#builder">Back to builder</a>
+        </div>`;
+      return;
+    }
+    main.innerHTML =
+      renderCartSection({ context: "checkout" }) +
+      renderPickupSection() +
+      renderCheckoutSection() +
+      renderTotalsSection();
+    bindCart(main);
+    bindCheckoutControls(main);
+    initStoreMap();
   }
 
   async function doLocationSearch(value) {
@@ -1051,7 +1122,7 @@
     }
     state.pickup.location = { lat: loc.lat, lng: loc.lng };
     state.pickup.locationLabel = loc.label || q;
-    renderDrawer();
+    renderCheckoutPage();
   }
   function doGeolocate() {
     if (!navigator.geolocation) { toast("Geolocation isn't available — enter a location.", true); return; }
@@ -1060,7 +1131,7 @@
       (pos) => {
         state.pickup.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         state.pickup.locationLabel = "Your current location";
-        renderDrawer();
+        renderCheckoutPage();
         toast("Sorted by distance from you");
       },
       () => toast("Location blocked — enter a zip or city instead.", true),
@@ -1072,7 +1143,7 @@
   function placeOrder() {
     captureCheckoutInputs();
     const c = state.checkout;
-    const body = $("#drawerBody");
+    const body = panelRoot();
     const err = $("#coError", body);
     const problems = [];
     if (!c.name.trim()) problems.push("name");
@@ -1101,13 +1172,16 @@
       dozens: dozenCount(),
       accountCreated: c.mode === "account",
     };
+    // order submitted — clear the working cart so a refresh doesn't re-checkout
+    state.cart.boxes = [];
+    clearPersisted();
     renderConfirmation();
   }
 
   function renderConfirmation() {
     const o = state.placed;
-    const body = $("#drawerBody");
-    $("#drawerTitle").textContent = "Order confirmed";
+    const body = panelRoot();
+    const title = $("#drawerTitle"); if (title) title.textContent = "Order confirmed";
     body.innerHTML = `
       <div class="confirm">
         <div class="confirm__check"><svg viewBox="0 0 24 24" width="38" height="38" aria-hidden="true"><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>
@@ -1136,8 +1210,11 @@
       state.checkout = { mode: "guest", name: "", email: "", phone: "", consent: false };
       state.design = DEFAULT_DESIGN();
       state.editingBoxId = null;
+      clearPersisted();
+      // from the checkout page, return to the builder to start fresh
+      if (document.getElementById("checkoutMain")) { window.location.href = "index.html"; return; }
       syncCartCount();
-      $("#drawerTitle").textContent = "Your order";
+      const t = $("#drawerTitle"); if (t) t.textContent = "Your order";
       closeDrawer();
       update();
     });
@@ -1286,7 +1363,7 @@
   }
 
   /* -------------------------------- INIT --------------------------------- */
-  function init() {
+  function initBuilder() {
     buildTypeOptions();
     buildFillingOptions();
     buildIcingOptions();
@@ -1340,6 +1417,20 @@
 
     update();
     syncCartCount();
+  }
+
+  // Checkout page: render the pickup + payment flow from the saved cart.
+  function initCheckoutPage() {
+    syncCartCount();
+    const cb = document.getElementById("cartButton");
+    if (cb) cb.addEventListener("click", () => { window.location.href = "index.html"; });
+    renderCheckoutPage();
+  }
+
+  function init() {
+    loadPersisted();
+    if (document.getElementById("checkoutMain")) initCheckoutPage();
+    else initBuilder();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
