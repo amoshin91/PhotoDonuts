@@ -100,6 +100,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.
   box-shadow: var(--sh-1);
   transition: transform var(--t) var(--ease-spring), box-shadow var(--t) var(--ease), background var(--t) var(--ease), opacity var(--t);
   white-space: nowrap;
+  text-decoration: none;
 }
 .btn:hover { transform: translateY(-2px); box-shadow: var(--sh-2); }
 .btn:active { transform: translateY(0) scale(0.98); }
@@ -158,6 +159,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.
 .hero__title em { font-style: italic; color: var(--berry); }
 .hero__sub { margin-top: 1rem; max-width: 46ch; color: var(--ink-soft); font-size: clamp(1rem, 2.2vw, 1.15rem); }
 .hero__cta { margin-top: 1.6rem; }
+.hero__ctas { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 1.6rem; }
 
 /* ---------------------------- Featured boxes ----------------------------- */
 .featured { padding-block: clamp(1rem, 3vw, 1.8rem) clamp(1.4rem, 4vw, 2.4rem); }

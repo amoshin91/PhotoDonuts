@@ -1328,8 +1328,17 @@
         </article>`;
     }).join("");
 
-    $$("[data-premade-add]", root).forEach((b) => b.addEventListener("click", () => addPremade(b.dataset.premadeAdd)));
-    $$("[data-premade-edit]", root).forEach((b) => b.addEventListener("click", () => customizePremade(b.dataset.premadeEdit)));
+    // On a page without the builder (boxes.html), the cart + builder live on the
+    // main page, so hand off there via a query param; index.html acts on it.
+    const standalone = !document.getElementById("controls");
+    $$("[data-premade-add]", root).forEach((b) => b.addEventListener("click", () => {
+      if (standalone) location.href = "index.html?add=" + encodeURIComponent(b.dataset.premadeAdd);
+      else addPremade(b.dataset.premadeAdd);
+    }));
+    $$("[data-premade-edit]", root).forEach((b) => b.addEventListener("click", () => {
+      if (standalone) location.href = "index.html?customize=" + encodeURIComponent(b.dataset.premadeEdit);
+      else customizePremade(b.dataset.premadeEdit);
+    }));
   }
 
   function addPremade(id) {
@@ -1354,7 +1363,9 @@
 
   /* ------------------------------- FOOTER -------------------------------- */
   function renderFooterStores() {
-    $("#footerStores").innerHTML = DB.STORES.map((s) => `
+    const el = $("#footerStores");
+    if (!el) return;
+    el.innerHTML = DB.STORES.map((s) => `
       <div class="footer-store">
         <div class="footer-store__name">${s.name.replace("Glaze & Co. — ", "")}</div>
         <div class="footer-store__addr">${s.address}</div>
@@ -1363,6 +1374,22 @@
   }
 
   /* -------------------------------- INIT --------------------------------- */
+  // The Boxes page (boxes.html) hands off to the builder via a query param.
+  // Act on it once, then strip it so a refresh doesn't repeat the action.
+  function handleEntryActions() {
+    const params = new URLSearchParams(location.search);
+    const customize = params.get("customize");
+    const add = params.get("add");
+    const order = params.get("order");
+    if (!customize && !add && !order) return;
+    if (window.history && history.replaceState) {
+      history.replaceState(null, "", location.pathname + location.hash);
+    }
+    if (customize) customizePremade(customize);
+    else if (add) addPremade(add);
+    else if (order) { openDrawer(); renderDrawer(); }
+  }
+
   function initBuilder() {
     buildTypeOptions();
     buildFillingOptions();
@@ -1417,6 +1444,8 @@
 
     update();
     syncCartCount();
+
+    handleEntryActions(); // act on a hand-off from the Boxes page, if any
   }
 
   // Checkout page: render the pickup + payment flow from the saved cart.
@@ -1427,10 +1456,21 @@
     renderCheckoutPage();
   }
 
+  // Boxes page (boxes.html): only the premade grid + footer. The order/builder
+  // live on the main page, so the cart button and card actions point there.
+  function initBoxesPage() {
+    renderFeatured();
+    renderFooterStores();
+    syncCartCount(); // reflect any persisted cart in the header badge
+    const cb = document.getElementById("cartButton");
+    if (cb) cb.addEventListener("click", () => { window.location.href = "index.html?order=1"; });
+  }
+
   function init() {
     loadPersisted();
     if (document.getElementById("checkoutMain")) initCheckoutPage();
-    else initBuilder();
+    else if (document.getElementById("controls")) initBuilder();
+    else initBoxesPage();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
