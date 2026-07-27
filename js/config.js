@@ -179,7 +179,25 @@
      blackout dates, lead time, slot increment and capacity.
      hours: index 0=Sunday ... 6=Saturday. null = closed that day.
      `cutoff` is the latest local clock time an order may be placed for
-     same-day pickup at that store. Times are "HH:MM" 24h in store-local. */
+     same-day pickup at that store. Times are "HH:MM" 24h in store-local.
+
+     PER-STORE MENU
+     --------------
+     Not every store stocks the same icings or sprinkle colors, so the builder
+     only offers what the chosen store can actually make. Add a `menu` block to
+     restrict a store:
+
+       menu: {
+         icingIds: ["vanilla", "chocolate"],     // subset of ICINGS
+         sprinkleColorIds: ["red", "blue"],      // subset of SPRINKLE_PALETTE
+       }
+
+     Omit `menu` entirely (or omit one of its keys) and the store offers
+     EVERYTHING in that category — so a new store needs no menu block at all.
+     Two knock-on effects are derived automatically in menu.js, not configured
+     here: dropping "custom" from icingIds removes the tie-dye/tint controls,
+     and a store missing any RAINBOW_SPRINKLE_IDS color loses the Rainbow
+     preset. Donut types and fillings are the same everywhere. */
   const SCHEDULING_DEFAULTS = {
     leadTimeMinutes: 30, // earliest pickup is now + 30 min
     slotIncrementMinutes: 30, // 30-minute increments, no fixed slots
@@ -205,6 +223,7 @@
       lng: -73.4549,
       timezone: "America/New_York",
       phone: "(516) 555-0142",
+      // flagship — carries the full catalog, so no `menu` block at all
       hours: [
         { open: "06:00", close: "20:00", cutoff: "19:00" }, // Sun
         { open: "05:00", close: "21:00", cutoff: "20:00" }, // Mon
@@ -224,6 +243,11 @@
       lng: -73.4742,
       timezone: "America/New_York",
       phone: "(516) 555-0188",
+      // no custom-color icing station; carries every rainbow color
+      menu: {
+        icingIds: ["vanilla", "chocolate", "strawberry"],
+        sprinkleColorIds: ["red", "light-pink", "hot-pink", "orange", "yellow", "blue", "green", "purple", "white", "black"],
+      },
       hours: [
         { open: "06:00", close: "20:00", cutoff: "19:00" },
         { open: "05:00", close: "21:00", cutoff: "20:00" },
@@ -243,6 +267,12 @@
       lng: -73.0106,
       timezone: "America/New_York",
       phone: "(631) 555-0177",
+      // smallest menu: two icings, six colors — missing hot-pink/orange/purple,
+      // so this store also loses the Rainbow preset (derived, not configured)
+      menu: {
+        icingIds: ["vanilla", "chocolate"],
+        sprinkleColorIds: ["red", "yellow", "blue", "green", "white", "black"],
+      },
       hours: [
         { open: "06:00", close: "20:00", cutoff: "19:00" },
         { open: "05:00", close: "21:00", cutoff: "20:00" },
@@ -262,6 +292,10 @@
       lng: -73.4771,
       timezone: "America/New_York",
       phone: "(516) 555-0133",
+      // full icing range including custom; a few specialty colors not stocked
+      menu: {
+        sprinkleColorIds: ["red", "light-pink", "hot-pink", "orange", "yellow", "blue", "light-blue", "green", "purple", "white"],
+      },
       hours: [
         { open: "06:00", close: "20:00", cutoff: "19:00" },
         { open: "05:00", close: "21:00", cutoff: "20:00" },

@@ -1,7 +1,11 @@
 /* =============================================================================
    app.js — State + UI wiring for the Glaze & Co. donut builder.
-   Depends on: config.js (DB), donut-svg.js (DonutSVG), pricing.js (Pricing),
-               pickup.js (Pickup).
+   Depends on: config.js (DB), menu.js (Menu), donut-svg.js (DonutSVG),
+               pricing.js (Pricing), pickup.js (Pickup).
+
+   Flow note: the store is chosen BEFORE the builder, because each store
+   stocks its own icings and sprinkle colors. Everything the builder offers
+   is filtered through Menu.forStore(selectedStore()).
    ============================================================================ */
 (function () {
   "use strict";
@@ -99,6 +103,14 @@
   /* --------------------------- DESIGN HELPERS ---------------------------- */
   function activeIcing(d) { return DB.ICINGS.find((i) => i.id === d.icingId); }
   function activeType(d) { return DB.DONUT_TYPES.find((t) => t.id === d.typeId); }
+
+  /* ------------------------- STORE-SCOPED MENU --------------------------- */
+  // The chosen store decides which icings and sprinkle colors exist. Until one
+  // is chosen the builder is locked, so currentMenu() is only consulted for
+  // rendering — never to silently widen what's on offer.
+  function selectedStore() { return Menu.storeById(state.pickup.storeId); }
+  function currentMenu() { return Menu.forStore(selectedStore()); }
+  function hasStore() { return !!selectedStore(); }
 
   // Vanilla unlocks one bonus sprinkle slot → max 5 instead of 4.
   function maxSprinkleColors(d) {
@@ -264,10 +276,14 @@
     wireRadiogroup(root, (id) => { state.design.fillingId = id; update(); });
   }
 
+  /* The four groups below are STORE-DEPENDENT: their contents change when the
+     store changes, so they only populate DOM. Their listeners are delegated
+     from the container and attached once in wireControls(), which keeps
+     repopulating cheap and free of duplicate handlers. */
   function buildIcingOptions() {
     const root = $("#icingOptions");
     root.innerHTML = "";
-    DB.ICINGS.forEach((i) => {
+    currentMenu().icings.forEach((i) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "chip";
@@ -276,12 +292,12 @@
       btn.innerHTML = `<span class="chip__dot" style="background:${i.color}"></span><span>${i.name}</span>`;
       root.appendChild(btn);
     });
-    wireRadiogroup(root, (id) => setIcing(id));
   }
 
   function buildDrizzleOptions() {
     const root = $("#drizzleOptions");
     root.innerHTML = "";
+    const menu = currentMenu();
     const chip = (id, name, dot) => {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -292,39 +308,72 @@
       root.appendChild(btn);
     };
     chip("", "None", "");
-    // same flavors/colors as the icing; Custom opens a color picker below
-    DB.ICINGS.filter((i) => !i.custom).forEach((i) => chip(i.id, i.name, `<span class="chip__dot" style="background:${i.color}"></span>`));
-    chip("custom", "Custom", `<span class="chip__dot chip__dot--rainbow"></span>`);
-    wireRadiogroup(root, (id) => { state.design.drizzleId = id || null; update(); });
+    // drizzle reuses the store's icing flavors; Custom opens a color picker
+    menu.icings.filter((i) => !i.custom).forEach((i) => chip(i.id, i.name, `<span class="chip__dot" style="background:${i.color}"></span>`));
+    if (menu.hasCustomIcing) chip("custom", "Custom", `<span class="chip__dot chip__dot--rainbow"></span>`);
   }
 
   function buildDrizzleTintOptions() {
     const root = $("#drizzleTintOptions");
     root.innerHTML = "";
-    DB.SPRINKLE_PALETTE.forEach((c) => root.appendChild(makeSwatch(c, "radio")));
-    root.addEventListener("click", (e) => {
+    currentMenu().sprinkles.forEach((c) => root.appendChild(makeSwatch(c, "radio")));
+  }
+
+  function buildSprinkleOptions() {
+    const root = $("#sprinkleOptions");
+    root.innerHTML = "";
+    currentMenu().sprinkles.forEach((c) => {
+      const sw = makeSwatch(c, "checkbox");
+      sw.classList.add("swatch--check");
+      sw.insertAdjacentHTML("beforeend", `<span class="swatch__check" aria-hidden="true"></span>`);
+      root.appendChild(sw);
+    });
+  }
+
+  function buildTintOptions() {
+    const root = $("#tintOptions");
+    root.innerHTML = "";
+    currentMenu().sprinkles.forEach((c) => root.appendChild(makeSwatch(c, "radio")));
+  }
+
+  // Repopulate everything the store scopes, then re-sync the UI. Called after
+  // the store changes; the design has already been coerced onto the new menu.
+  function rebuildStoreOptions() {
+    buildIcingOptions();
+    buildDrizzleOptions();
+    buildDrizzleTintOptions();
+    buildTintOptions();
+    buildSprinkleOptions();
+  }
+
+  // One-time delegated listeners for the store-dependent groups.
+  function wireControls() {
+    wireRadiogroup($("#icingOptions"), (id) => setIcing(id));
+    wireRadiogroup($("#drizzleOptions"), (id) => { state.design.drizzleId = id || null; update(); });
+
+    $("#drizzleTintOptions").addEventListener("click", (e) => {
       const btn = e.target.closest(".swatch");
       if (!btn || btn.disabled) return;
       const id = btn.dataset.id;
       state.design.drizzleCustomId = state.design.drizzleCustomId === id ? null : id;
       update();
     });
-  }
 
-  function buildSprinkleOptions() {
-    const root = $("#sprinkleOptions");
-    root.innerHTML = "";
-    DB.SPRINKLE_PALETTE.forEach((c) => {
-      const sw = makeSwatch(c, "checkbox");
-      sw.classList.add("swatch--check");
-      sw.insertAdjacentHTML("beforeend", `<span class="swatch__check" aria-hidden="true"></span>`);
-      root.appendChild(sw);
+    $("#tintOptions").addEventListener("click", (e) => {
+      const btn = e.target.closest(".swatch");
+      if (!btn || btn.disabled) return;
+      const id = btn.dataset.id;
+      state.design.icingTintId = state.design.icingTintId === id ? null : id;
+      state.design.tieDyeIcing = false; // tint and tie-dye are mutually exclusive
+      update();
     });
-    root.addEventListener("click", (e) => {
+
+    $("#sprinkleOptions").addEventListener("click", (e) => {
       const btn = e.target.closest(".swatch");
       if (!btn || btn.disabled) return;
       toggleSprinkle(btn.dataset.id);
     });
+
     $("#noSprinkles").addEventListener("change", (e) => {
       state.design.noSprinkles = e.target.checked;
       if (e.target.checked) {
@@ -332,20 +381,6 @@
         state.design.rainbowSprinkles = false;
         state.design.chocolateSprinkles = false;
       }
-      update();
-    });
-  }
-
-  function buildTintOptions() {
-    const root = $("#tintOptions");
-    root.innerHTML = "";
-    DB.SPRINKLE_PALETTE.forEach((c) => root.appendChild(makeSwatch(c, "radio")));
-    root.addEventListener("click", (e) => {
-      const btn = e.target.closest(".swatch");
-      if (!btn || btn.disabled) return;
-      const id = btn.dataset.id;
-      state.design.icingTintId = state.design.icingTintId === id ? null : id;
-      state.design.tieDyeIcing = false; // tint and tie-dye are mutually exclusive
       update();
     });
   }
@@ -449,6 +484,8 @@
     const max = maxSprinkleColors(d);
     const presetActive = d.rainbowSprinkles || d.chocolateSprinkles;
     $("#noSprinkles").checked = d.noSprinkles;
+    // Rainbow is a fixed 7-color mix — hidden at stores that don't stock all 7
+    $("#rainbowBtn").hidden = !currentMenu().rainbowAvailable;
     $("#rainbowBtn").setAttribute("aria-pressed", d.rainbowSprinkles ? "true" : "false");
     $("#chocBtn").setAttribute("aria-pressed", d.chocolateSprinkles ? "true" : "false");
     // counter: X/4, or X/5 when Vanilla unlocks the bonus slot
@@ -607,6 +644,7 @@
 
   /* ----------------------------- CART / DRAWER --------------------------- */
   function addOrUpdateBox() {
+    if (!requireStore()) return; // no store → no menu → nothing valid to add
     const design = JSON.parse(JSON.stringify(state.design));
     if (state.editingBoxId) {
       const box = state.cart.boxes.find((b) => b.id === state.editingBoxId);
@@ -784,13 +822,52 @@
       </section>`;
   }
 
-  /* ------------------------------- PICKUP -------------------------------- */
-  function renderPickupSection() {
+  /* --------------------------- STORE CHOOSER ------------------------------
+     Shared by the builder page's step-1 gate and the checkout page's pickup
+     section. Renders location search + map + nearby dropdown + the chosen
+     store's card. Requires pickup.js, so it is never used on boxes.html. */
+
+  const STORE_PIN = `<span class="store-card__pin"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg></span>`;
+
+  function storeCardHtml(store) {
+    const open = isStoreOpenNow(store);
+    const dist = store.distance != null ? `${store.distance.toFixed(1)} mi` : "";
+    return `
+      <div class="store-card store-card--selected">
+        ${STORE_PIN}
+        <span style="flex:1">
+          <span class="store-card__name">${escapeHtml(store.name)}</span>
+          <span class="store-card__addr">${escapeHtml(store.address)}</span>
+          <span class="store-card__meta">
+            <span class="${open.open ? "store-open" : "store-closed"}">${open.label}</span>
+            <span>${tzShort(store.timezone)}</span>
+          </span>
+        </span>
+        ${dist ? `<span class="store-card__dist">${dist}</span>` : ""}
+      </div>`;
+  }
+
+  // What this store can actually make — the reason store selection comes first.
+  function storeMenuSummaryHtml(store) {
+    const menu = Menu.forStore(store);
+    if (menu.isFull) {
+      return `<p class="menu-summary menu-summary--full">✓ Full menu — every icing and all ${DB.SPRINKLE_PALETTE.length} sprinkle colors.</p>`;
+    }
+    const icings = menu.icings.map((i) => escapeHtml(i.name)).join(", ");
+    const dots = menu.sprinkles.map((c) => `<span class="spr-dot" style="background:${c.hex}"></span>`).join("");
+    return `
+      <div class="menu-summary">
+        <p class="menu-summary__line"><strong>Icings here:</strong> ${icings}${menu.hasCustomIcing ? "" : " <span class=\"menu-summary__missing\">(no custom colors)</span>"}</p>
+        <p class="menu-summary__line"><strong>Sprinkles:</strong> ${menu.sprinkles.length} of ${DB.SPRINKLE_PALETTE.length} colors <span class="spr-dots" aria-hidden="true">${dots}</span></p>
+        ${menu.rainbowAvailable ? "" : `<p class="menu-summary__line menu-summary__missing">Rainbow mix isn't available at this location.</p>`}
+      </div>`;
+  }
+
+  function storeChooserHtml() {
     const p = state.pickup;
     const stores = Pickup.sortStoresByDistance(p.location);
-    const selected = stores.find((s) => s.id === p.storeId);
 
-    let inner = `
+    let html = `
       <div class="locate-row">
         <input class="input" id="locInput" type="text" inputmode="text" placeholder="Zip, city, or address" value="${escapeHtml(p.locationLabel || "")}" aria-label="Search location" />
         <button class="btn btn--ghost" id="locSearch" type="button">Search</button>
@@ -800,17 +877,13 @@
         Use my current location
       </button>`;
 
-    inner += renderMap(selected, p.location);
+    html += renderMap(stores.find((s) => s.id === p.storeId), p.location);
 
-    // distance to the nearest store for whatever location was entered
     if (p.location && stores.length && stores[0].distance != null) {
-      inner += `<p class="field-note" style="margin:0 0 .2rem">Nearest: <strong>${escapeHtml(stores[0].name)}</strong> — ${stores[0].distance.toFixed(1)} mi from ${escapeHtml(p.locationLabel || "your location")}</p>`;
+      html += `<p class="field-note" style="margin:0 0 .2rem">Nearest: <strong>${escapeHtml(stores[0].name)}</strong> — ${stores[0].distance.toFixed(1)} mi from ${escapeHtml(p.locationLabel || "your location")}</p>`;
     }
 
-    const pin = `<span class="store-card__pin"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg></span>`;
-
-    // dropdown of nearby stores below the map (scales to any number of stores)
-    inner += `
+    html += `
       <div class="field" style="margin-top:.9rem">
         <label class="field-label" for="storeSelect">Nearby stores${p.location ? " · nearest first" : " — search above to sort by distance"}</label>
         <select class="input input--full select" id="storeSelect">
@@ -821,29 +894,63 @@
           }).join("")}
         </select>
       </div>`;
+    return html;
+  }
 
-    // details for the chosen store
-    if (selected) {
-      const open = isStoreOpenNow(selected);
-      const dist = selected.distance != null ? `${selected.distance.toFixed(1)} mi` : "";
-      inner += `
-        <div class="store-card store-card--selected" style="margin-top:.7rem">
-          ${pin}
-          <span style="flex:1">
-            <span class="store-card__name">${escapeHtml(selected.name)}</span>
-            <span class="store-card__addr">${escapeHtml(selected.address)}</span>
-            <span class="store-card__meta">
-              <span class="${open.open ? "store-open" : "store-closed"}">${open.label}</span>
-              <span>${tzShort(selected.timezone)}</span>
-            </span>
-          </span>
-          ${dist ? `<span class="store-card__dist">${dist}</span>` : ""}
+  /* ---- builder page: the step-1 gate ------------------------------------- */
+  // Once a store is set the chooser collapses to a compact confirmed card;
+  // "Change store" re-opens it. Not persisted — a reload starts collapsed.
+  let storeChooserOpen = false;
+
+  function renderStoreGate() {
+    const body = $("#storeStepBody");
+    if (!body) return;
+    destroyStoreMap();
+    const store = selectedStore();
+
+    if (store && !storeChooserOpen) {
+      const withDist = Pickup.sortStoresByDistance(state.pickup.location).find((s) => s.id === store.id) || store;
+      body.innerHTML = `
+        <div class="store-chosen">
+          ${storeCardHtml(withDist)}
+          ${storeMenuSummaryHtml(store)}
+          <button class="btn btn--ghost store-chosen__change" id="changeStore" type="button">Change store</button>
         </div>`;
+      $("#changeStore").addEventListener("click", () => {
+        storeChooserOpen = true;
+        renderStoreGate();
+        $("#storeStepBody").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+      syncBuilderLock();
+      return;
     }
 
-    // date + time once a store is chosen
-    if (selected) {
-      inner += renderDateTime(selected);
+    body.innerHTML = `
+      <div class="store-picker">
+        <p class="store-picker__lede">Every shop stocks its own icings and sprinkle colors, so we'll only show you what your store can actually make.</p>
+        ${storeChooserHtml()}
+        ${store ? `<button class="btn btn--ghost" id="cancelStoreChange" type="button" style="margin-top:.8rem">Keep ${escapeHtml(store.name)}</button>` : ""}
+      </div>`;
+    bindStoreChooser(body);
+    const cancel = $("#cancelStoreChange", body);
+    if (cancel) cancel.addEventListener("click", () => { storeChooserOpen = false; renderStoreGate(); });
+    initStoreMap();
+    syncBuilderLock();
+  }
+
+  /* ---- checkout page: pickup store & time -------------------------------- */
+  function renderPickupSection() {
+    const store = selectedStore();
+    let inner;
+
+    if (store && !storeChooserOpen) {
+      const withDist = Pickup.sortStoresByDistance(state.pickup.location).find((s) => s.id === store.id) || store;
+      inner = storeCardHtml(withDist) +
+        `<button class="btn btn--ghost btn--block" id="changeStore" type="button" style="margin-top:.6rem">Change store</button>` +
+        renderDateTime(store);
+    } else {
+      inner = storeChooserHtml() +
+        (store ? `<button class="btn btn--ghost" id="cancelStoreChange" type="button" style="margin-top:.8rem">Keep ${escapeHtml(store.name)}</button>` : "");
     }
 
     return `
@@ -851,6 +958,150 @@
         <h3 class="order-section__title"><span class="order-section__step">2</span> Pickup store &amp; time</h3>
         ${inner}
       </section>`;
+  }
+
+  /* ---- shared wiring ----------------------------------------------------- */
+  function bindStoreChooser(root) {
+    const locSearch = $("#locSearch", root);
+    if (locSearch) locSearch.addEventListener("click", () => doLocationSearch($("#locInput", root).value));
+    const locInput = $("#locInput", root);
+    if (locInput) locInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doLocationSearch(locInput.value); } });
+    const geoBtn = $("#geoBtn", root);
+    if (geoBtn) geoBtn.addEventListener("click", doGeolocate);
+    const storeSelect = $("#storeSelect", root);
+    if (storeSelect) storeSelect.addEventListener("change", () => pickStore(storeSelect.value || null));
+  }
+
+  // Re-render whichever surface owns the chooser on this page.
+  function rerenderStoreUI() {
+    if (document.getElementById("checkoutMain")) renderCheckoutPage();
+    else renderStoreGate();
+  }
+
+  /* Boxes in the cart that the CURRENT store can't make. Normally empty —
+     pickStore() clears them at switch time — but a store's menu can change
+     between visits, so checkout re-checks rather than trusting the cart. */
+  function incompatibleBoxes() {
+    const store = selectedStore();
+    if (!store) return [];
+    return state.cart.boxes
+      .map((b) => ({ box: b, problems: Menu.checkDesign(b.design, store).problems }))
+      .filter((x) => x.problems.length);
+  }
+
+  /* ---- choosing / changing the store ------------------------------------ */
+  /* Switching stores can strand boxes the new store can't make. Rather than
+     dropping them silently or blocking the switch, list exactly what's
+     affected and let the customer decide. */
+  async function pickStore(id) {
+    if (!id) { rerenderStoreUI(); return; } // "Choose a store…" placeholder
+    if (id === state.pickup.storeId) { storeChooserOpen = false; rerenderStoreUI(); return; }
+
+    const next = Menu.storeById(id);
+    if (!next) { rerenderStoreUI(); return; }
+
+    const blocked = state.cart.boxes
+      .map((b) => ({ box: b, problems: Menu.checkDesign(b.design, next).problems }))
+      .filter((x) => x.problems.length);
+
+    if (blocked.length) {
+      const n = blocked.reduce((sum, x) => sum + x.box.qty, 0);
+      const list = blocked.map((x) => `
+        <li>
+          <strong>${escapeHtml(activeType(x.box.design).name)} dozen</strong>${x.box.qty > 1 ? ` ×${x.box.qty}` : ""}
+          <span class="dlg-list__why">needs ${escapeHtml(x.problems.join(", "))}</span>
+        </li>`).join("");
+      const ok = await confirmDialog({
+        title: "Some boxes can't be made there",
+        html: `
+          <p>${escapeHtml(next.name)} doesn't carry everything ${blocked.length === 1 ? "one of your boxes uses" : "some of your boxes use"}:</p>
+          <ul class="dlg-list">${list}</ul>
+          <p>Switching removes ${n === 1 ? "that dozen" : `those ${n} dozen`} from your order. The rest stays put.</p>`,
+        confirmLabel: "Remove & switch store",
+        cancelLabel: "Keep my current store",
+      });
+      if (!ok) { storeChooserOpen = false; rerenderStoreUI(); return; }
+      const drop = new Set(blocked.map((x) => x.box.id));
+      state.cart.boxes = state.cart.boxes.filter((b) => !drop.has(b.id));
+      if (drop.has(state.editingBoxId)) state.editingBoxId = null;
+    }
+
+    applyStore(id);
+  }
+
+  function applyStore(id) {
+    const changedStore = state.pickup.storeId !== id;
+    state.pickup.storeId = id;
+    if (changedStore) { state.pickup.dateStr = null; state.pickup.slotHm = null; }
+    storeChooserOpen = false;
+
+    // pull the in-progress builder design onto the new store's menu
+    const adjustments = Menu.coerceDesign(state.design, selectedStore());
+    persist();
+
+    if (document.getElementById("controls")) {
+      rebuildStoreOptions();
+      update();
+    }
+    syncCartCount();
+    rerenderStoreUI();
+    if (adjustments.length) toast("Design adjusted: " + adjustments.join("; "), true);
+  }
+
+  // The builder stays inert until a store is chosen — its options don't exist
+  // until we know which store's menu to draw from.
+  function syncBuilderLock() {
+    const builder = document.getElementById("builder");
+    if (!builder) return;
+    const locked = !hasStore();
+    builder.classList.toggle("is-locked", locked);
+    const note = $("#builderLockedNote");
+    if (note) note.hidden = !locked;
+    const grid = $(".builder__grid", builder);
+    if (grid) {
+      grid.setAttribute("aria-hidden", locked ? "true" : "false");
+      if ("inert" in grid) grid.inert = locked; // real keyboard/AT blocking
+    }
+  }
+
+  /* ---- small confirm dialog (used for destructive store switches) -------- */
+  function confirmDialog(opts) {
+    return new Promise((resolve) => {
+      const prevFocus = document.activeElement;
+      const wrap = document.createElement("div");
+      wrap.className = "dlg-overlay";
+      wrap.innerHTML = `
+        <div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dlgTitle" aria-describedby="dlgBody">
+          <h2 class="dlg__title" id="dlgTitle">${escapeHtml(opts.title)}</h2>
+          <div class="dlg__body" id="dlgBody">${opts.html}</div>
+          <div class="dlg__actions">
+            <button class="btn btn--ghost" type="button" data-act="cancel">${escapeHtml(opts.cancelLabel || "Cancel")}</button>
+            <button class="btn btn--primary" type="button" data-act="ok">${escapeHtml(opts.confirmLabel || "Confirm")}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(wrap);
+
+      const close = (val) => {
+        document.removeEventListener("keydown", onKey, true);
+        wrap.remove();
+        if (prevFocus && prevFocus.focus) prevFocus.focus();
+        resolve(val);
+      };
+      const onKey = (e) => {
+        if (e.key === "Escape") { e.preventDefault(); close(false); return; }
+        if (e.key !== "Tab") return;
+        const f = $$("button", wrap);
+        if (!f.length) return;
+        const first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      };
+      document.addEventListener("keydown", onKey, true);
+      wrap.addEventListener("click", (e) => { if (e.target === wrap) close(false); });
+      $('[data-act="cancel"]', wrap).addEventListener("click", () => close(false));
+      $('[data-act="ok"]', wrap).addEventListener("click", () => close(true));
+      $('[data-act="ok"]', wrap).focus();
+    });
   }
 
   function renderMap(selected, loc) {
@@ -899,12 +1150,7 @@
       const marker = L.marker([s.lat, s.lng], { opacity: isSel ? 1 : 0.82 }).addTo(map);
       const dist = s.distance != null ? ` · ${s.distance.toFixed(1)} mi` : "";
       marker.bindPopup(`<strong>${escapeHtml(s.name)}</strong><br>${escapeHtml(s.address)}${dist}`);
-      marker.on("click", () => {
-        state.pickup.storeId = s.id;
-        state.pickup.dateStr = null;
-        state.pickup.slotHm = null;
-        renderCheckoutPage();
-      });
+      marker.on("click", () => { pickStore(s.id); });
       if (isSel) marker.openPopup();
       pts.push([s.lat, s.lng]);
     });
@@ -1059,9 +1305,30 @@
       </section>`;
   }
 
+  // Shown only if a store's menu changed under an existing cart.
+  function renderUnmakeableSection() {
+    const bad = incompatibleBoxes();
+    if (!bad.length) return "";
+    const store = selectedStore();
+    const list = bad.map((x) => `
+      <li><strong>${escapeHtml(activeType(x.box.design).name)} dozen</strong>${x.box.qty > 1 ? ` ×${x.box.qty}` : ""}
+      <span class="dlg-list__why">needs ${escapeHtml(x.problems.join(", "))}</span></li>`).join("");
+    return `
+      <section class="order-section">
+        <p class="notice notice--warn" style="margin-bottom:.8rem">
+          ${escapeHtml(store.name)} can no longer make ${bad.length === 1 ? "one box" : `${bad.length} boxes`} in this order.
+        </p>
+        <ul class="dlg-list">${list}</ul>
+        <button class="btn btn--ghost btn--block" id="dropUnmakeable" type="button">
+          Remove ${bad.length === 1 ? "it" : "them"} and continue
+        </button>
+        <p class="field-note" style="margin-top:.5rem">Or pick a different store above.</p>
+      </section>`;
+  }
+
   function renderTotalsSection() {
     const totals = Pricing.priceCart(expandedBoxes());
-    const ready = pickupComplete();
+    const ready = pickupComplete() && !incompatibleBoxes().length;
     const store = DB.STORES.find((s) => s.id === state.pickup.storeId);
     const whenText = ready ? Pickup.formatPickupWhen(store, state.pickup.dateStr, state.pickup.slotHm) : null;
     return `
@@ -1073,7 +1340,9 @@
           <div class="totals__row totals__row--grand"><span>Total</span><span>${Pricing.fmt(totals.total)}</span></div>
         </div>
         <button class="btn btn--primary btn--block" id="placeOrder" style="margin-top:1rem" ${ready ? "" : "disabled"}>
-          ${ready ? "Pay " + Pricing.fmt(totals.total) + " & reserve pickup" : "Select pickup to continue"}
+          ${ready ? "Pay " + Pricing.fmt(totals.total) + " & reserve pickup"
+            : incompatibleBoxes().length ? "Resolve unavailable boxes to continue"
+            : "Select pickup to continue"}
         </button>
         <p class="field-note" style="text-align:center;margin-top:.6rem">Minimum order is 1 dozen.</p>
       </section>`;
@@ -1103,20 +1372,13 @@
 
   // Pickup + contact/payment controls — checkout page only.
   function bindCheckoutControls(root) {
-    const locSearch = $("#locSearch", root);
-    if (locSearch) locSearch.addEventListener("click", () => doLocationSearch($("#locInput", root).value));
-    const locInput = $("#locInput", root);
-    if (locInput) locInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doLocationSearch(locInput.value); } });
-    const geoBtn = $("#geoBtn", root);
-    if (geoBtn) geoBtn.addEventListener("click", doGeolocate);
+    bindStoreChooser(root); // location search + geolocate + nearby dropdown
 
-    const storeSelect = $("#storeSelect", root);
-    if (storeSelect) storeSelect.addEventListener("change", () => {
-      state.pickup.storeId = storeSelect.value || null;
-      state.pickup.dateStr = null;
-      state.pickup.slotHm = null;
-      renderCheckoutPage();
-    });
+    const changeStore = $("#changeStore", root);
+    if (changeStore) changeStore.addEventListener("click", () => { storeChooserOpen = true; renderCheckoutPage(); });
+    const cancelChange = $("#cancelStoreChange", root);
+    if (cancelChange) cancelChange.addEventListener("click", () => { storeChooserOpen = false; renderCheckoutPage(); });
+
     $$(".day-chip", root).forEach((chip) => {
       if (chip.disabled) return;
       chip.addEventListener("click", () => { state.pickup.dateStr = chip.dataset.date; state.pickup.slotHm = null; renderCheckoutPage(); });
@@ -1166,11 +1428,22 @@
     }
     main.innerHTML =
       renderCartSection({ context: "checkout" }) +
+      renderUnmakeableSection() +
       renderPickupSection() +
       renderCheckoutSection() +
       renderTotalsSection();
     bindCart(main);
     bindCheckoutControls(main);
+    const drop = $("#dropUnmakeable", main);
+    if (drop) drop.addEventListener("click", () => {
+      const gone = new Set(incompatibleBoxes().map((x) => x.box.id));
+      state.cart.boxes = state.cart.boxes.filter((b) => !gone.has(b.id));
+      if (gone.has(state.editingBoxId)) state.editingBoxId = null;
+      persist();
+      syncCartCount();
+      renderCheckoutPage();
+      toast(gone.size === 1 ? "Box removed" : `${gone.size} boxes removed`);
+    });
     initStoreMap();
   }
 
@@ -1188,7 +1461,7 @@
     }
     state.pickup.location = { lat: loc.lat, lng: loc.lng };
     state.pickup.locationLabel = loc.label || q;
-    renderCheckoutPage();
+    rerenderStoreUI();
   }
   function doGeolocate() {
     if (!navigator.geolocation) { toast("Geolocation isn't available — enter a location.", true); return; }
@@ -1197,7 +1470,7 @@
       (pos) => {
         state.pickup.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         state.pickup.locationLabel = "Your current location";
-        renderCheckoutPage();
+        rerenderStoreUI();
         toast("Sorted by distance from you");
       },
       () => toast("Location blocked — enter a zip or city instead.", true),
@@ -1234,6 +1507,14 @@
     const c = state.checkout;
     const body = panelRoot();
     const err = $("#coError", body);
+
+    // last line of defence: never submit an order the store can't make
+    const unmakeable = incompatibleBoxes();
+    if (unmakeable.length) {
+      renderCheckoutPage();
+      toast("Some boxes aren't available at this store — resolve them first.", true);
+      return;
+    }
     const problems = []; // { sel, msg } — sel marks the offending field
     if (!c.name.trim()) problems.push({ sel: "#coName", msg: "your name" });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim())) problems.push({ sel: "#coEmail", msg: "a valid email" });
@@ -1400,12 +1681,18 @@
   function renderFeatured() {
     const root = $("#featuredGrid");
     if (!root) return;
+    const store = selectedStore();
     root.innerHTML = DB.PREMADE_BOXES.map((p) => {
       const design = premadeDesign(p);
       const svg = DonutSVG.render(resolveDesign(design), { size: 134, decorative: true });
       const price = Pricing.priceBox(design).subtotal;
+      // once a store is chosen, say up front which presets it can't make
+      const problems = premadeBlocked(p);
+      const note = problems
+        ? `<p class="feature-card__unavailable">Not available at ${escapeHtml(store.name)} — needs ${escapeHtml(problems.join(", "))}.</p>`
+        : "";
       return `
-        <article class="feature-card">
+        <article class="feature-card${problems ? " feature-card--unavailable" : ""}">
           <div class="feature-card__art">
             <span class="feature-card__badge">${escapeHtml(p.occasion)}</span>
             <div class="feature-card__donut">${svg}</div>
@@ -1413,11 +1700,12 @@
           <div class="feature-card__body">
             <h3 class="feature-card__name">${escapeHtml(p.name)}</h3>
             <p class="feature-card__blurb">${escapeHtml(p.blurb)}</p>
+            ${note}
             <div class="feature-card__foot">
               <span class="feature-card__price">${Pricing.fmt(price)}<span class="feature-card__per">/ dozen</span></span>
               <div class="feature-card__actions">
                 <button class="btn btn--ghost" data-premade-edit="${p.id}">Customize</button>
-                <button class="btn btn--primary" data-premade-add="${p.id}">Add to order</button>
+                <button class="btn btn--primary" data-premade-add="${p.id}" ${problems ? "disabled" : ""}>Add to order</button>
               </div>
             </div>
           </div>
@@ -1437,9 +1725,22 @@
     }));
   }
 
+  // A premade only works if the chosen store stocks everything it uses.
+  function premadeBlocked(p) {
+    if (!hasStore()) return null;
+    const res = Menu.checkDesign(premadeDesign(p), selectedStore());
+    return res.ok ? null : res.problems;
+  }
+
   function addPremade(id) {
     const p = DB.PREMADE_BOXES.find((x) => x.id === id);
     if (!p) return;
+    if (!requireStore()) return;
+    const problems = premadeBlocked(p);
+    if (problems) {
+      toast(`${selectedStore().name} can't make ${p.name} — needs ${problems.join(", ")}.`, true);
+      return;
+    }
     state.cart.boxes.push({ id: nextBoxId++, design: premadeDesign(p), qty: 1 });
     syncCartCount();
     openDrawer();
@@ -1450,11 +1751,25 @@
   function customizePremade(id) {
     const p = DB.PREMADE_BOXES.find((x) => x.id === id);
     if (!p) return;
+    if (!requireStore()) return;
     state.design = premadeDesign(p);
     state.editingBoxId = null;
+    // trim anything this store can't make, and say what changed
+    const adjustments = Menu.coerceDesign(state.design, selectedStore());
     update();
     document.getElementById("builder").scrollIntoView({ behavior: "smooth", block: "start" });
-    toast(`Loaded "${p.name}" — make it your own`);
+    toast(adjustments.length
+      ? `Loaded "${p.name}" — adjusted for ${selectedStore().name}: ${adjustments.join("; ")}`
+      : `Loaded "${p.name}" — make it your own`, adjustments.length > 0);
+  }
+
+  // Nudge the visitor to step 1 when an action needs a store and none is set.
+  function requireStore() {
+    if (hasStore()) return true;
+    const step = document.getElementById("storeStep");
+    if (step) step.scrollIntoView({ behavior: "smooth", block: "start" });
+    toast("Choose your store first — menus differ by location.", true);
+    return false;
   }
 
   /* ------------------------------- FOOTER -------------------------------- */
@@ -1489,13 +1804,14 @@
   function initBuilder() {
     buildTypeOptions();
     buildFillingOptions();
-    buildIcingOptions();
-    buildDrizzleOptions();
-    buildDrizzleTintOptions();
-    buildTintOptions();
-    buildSprinkleOptions();
+    rebuildStoreOptions(); // icing / drizzle / sprinkles / tints — store-scoped
+    wireControls();        // their listeners are delegated, so wire once
     renderFeatured();
     renderFooterStores();
+
+    // a persisted store may already narrow the menu; make the design fit it
+    if (hasStore()) Menu.coerceDesign(state.design, selectedStore());
+    renderStoreGate();
 
     // custom icing tie-dye
     $("#tieDyeBtn").addEventListener("click", () => {

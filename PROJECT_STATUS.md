@@ -1,6 +1,6 @@
 # Glaze & Co. — Donut Builder · Project Status & Roadmap
 
-Last updated: 2026-07-02
+Last updated: 2026-07-27
 
 This document tracks what has been built and what remains to take the site from a
 working front-end prototype to a fully functional, live, production service.
@@ -133,6 +133,47 @@ Bug fixes:
 - [x] Pickup validation is skipped on boxes.html, which doesn't load pickup.js
       — it read the persisted store through `Pickup` and threw on every load
       for a returning visitor (swallowed by the load try/catch, but real).
+
+### Store-first ordering + per-store menus (2026-07-27)
+Stores don't all stock the same icings and sprinkle colors, so the store is now
+chosen BEFORE the builder and the builder only offers what that store can make.
+
+- [x] New `js/menu.js` owns the whole notion of "what can this store make":
+      `forStore()` resolves the option lists, `checkDesign()` validates an
+      existing design, `coerceDesign()` nudges one onto a store's menu.
+      Config lives in `STORES[n].menu` (`icingIds`, `sprinkleColorIds`);
+      omitting it means the store carries everything, so new stores need no
+      menu config. Documented in README + config.js.
+- [x] index.html gained a step-1 "Choose your store" gate above the builder.
+      The builder is dimmed AND `inert` until a store is set, so it's blocked
+      for keyboard and AT too, not just visually.
+- [x] The store chooser (location search / geolocate / map / nearby dropdown)
+      is now one component shared by the gate and the checkout pickup step,
+      instead of checkout-only markup. Checkout shows the chosen store as a
+      compact card with "Change store".
+- [x] Icing, drizzle, sprinkle, tint and drizzle-tint controls are all built
+      from the store's menu. Two derived effects: no custom icing also removes
+      tie-dye/tint and Custom drizzle; a store missing any rainbow color loses
+      the Rainbow preset.
+- [x] Changing store with boxes in the cart lists exactly which boxes the new
+      store can't make and offers "remove just those" or cancel — nothing is
+      dropped silently. Ready-made boxes on boxes.html are badged + disabled
+      when the chosen store can't make them.
+- [x] Checkout re-validates the cart against the store on every render (a
+      store's menu can change between visits), blocks the pay button with a
+      reason, and `placeOrder()` refuses as a last line of defence.
+
+Bugs found while building the above:
+- [x] `[hidden]` did nothing on any element whose class set `display`
+      (`.style-btn`, `.style-row`) — author styles outrank the UA rule. The
+      "Extra heavy / Half top" finish row was visible with "No sprinkles" on,
+      and the Rainbow button stayed on screen at stores that can't make it.
+      Fixed globally with `[hidden] { display: none !important }`.
+- [x] Leaflet gives its panes `z-index: 400`; `.map-frame` created no stacking
+      context, so with the map now on the builder page it painted straight
+      over the order drawer and its overlay. Fixed with `isolation: isolate`.
+- [x] Sticky header hid the target heading on every in-page anchor jump; added
+      `scroll-margin-top` to the linked sections.
 
 Validation & checkout UX:
 - [x] Checkout validation is field-level: offending inputs get `.is-invalid` +

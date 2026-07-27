@@ -19,7 +19,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23f4ecd9' stroke='%23e8b873' stroke-width='8'/><circle cx='50' cy='50' r='14' fill='white'/></svg>" />
 </head>
 <body>
-  <a class="skip-link" href="#builder">Skip to donut builder</a>
+  <a class="skip-link" href="#storeStep">Skip to ordering</a>
 
   <!-- ============================ HEADER ============================ -->
   <header class="site-header" id="top">
@@ -51,15 +51,33 @@
       <h1 id="heroTitle" class="hero__title">Build a dozen<br />that's <em>unmistakably</em> yours.</h1>
       <p class="hero__sub">Pick a style, dip it, finish it with sprinkles, and watch your box come to life. Reserve pickup at your neighborhood Glaze&nbsp;&amp; Co.</p>
       <div class="hero__ctas">
-        <a href="#builder" class="btn btn--primary">Start building</a>
+        <a href="#storeStep" class="btn btn--primary">Start building</a>
         <a href="boxes.html" class="btn btn--ghost">Browse ready-made boxes</a>
       </div>
     </div>
   </section>
 
+  <!-- ============================ STORE GATE ============================ -->
+  <!-- Store comes first: each store stocks a different set of icings and
+       sprinkle colors, so the builder can't offer options until it knows
+       where the order is being picked up. Rendered by app.js. -->
+  <section id="storeStep" class="store-step wrap" aria-labelledby="storeStepHeading">
+    <h2 id="storeStepHeading" class="section-heading section-heading--step">
+      <span class="step-num">1</span> Choose your store
+    </h2>
+    <div id="storeStepBody"></div>
+  </section>
+
   <!-- ============================ BUILDER ============================ -->
   <main id="builder" class="builder wrap" aria-labelledby="builderHeading">
-    <h2 id="builderHeading" class="section-heading">Design your donut</h2>
+    <h2 id="builderHeading" class="section-heading section-heading--step">
+      <span class="step-num">2</span> Design your donut
+    </h2>
+
+    <!-- shown in place of the controls until a store is picked -->
+    <p class="builder__locked-note" id="builderLockedNote" hidden>
+      Pick a store above to see what it can make.
+    </p>
 
     <div class="builder__grid">
       <!-- ---------- CONTROL PANEL ---------- -->
@@ -185,9 +203,9 @@
   <section id="how" class="how wrap" aria-labelledby="howHeading">
     <h2 id="howHeading" class="section-heading">How pickup works</h2>
     <ol class="how__steps">
-      <li class="how__step"><span class="how__num">1</span><h3>Design every box</h3><p>Each box is a custom dozen. Add as many designs as you like — minimum one dozen.</p></li>
-      <li class="how__step"><span class="how__num">2</span><h3>Choose a store</h3><p>Find your nearest Glaze&nbsp;&amp; Co. by location and pick a 30-minute pickup window.</p></li>
-      <li class="how__step"><span class="how__num">3</span><h3>Pay &amp; pick up</h3><p>Check out online, then grab your fresh dozens at the counter. We'll text and email you.</p></li>
+      <li class="how__step"><span class="how__num">1</span><h3>Choose a store</h3><p>Find your nearest Glaze&nbsp;&amp; Co. by location. Each shop stocks its own icings and sprinkle colors, so this comes first.</p></li>
+      <li class="how__step"><span class="how__num">2</span><h3>Design every box</h3><p>Each box is a custom dozen, built from what your store can actually make. Add as many designs as you like.</p></li>
+      <li class="how__step"><span class="how__num">3</span><h3>Pay &amp; pick up</h3><p>Pick a 30-minute window, check out online, then grab your fresh dozens at the counter. We'll text and email you.</p></li>
     </ol>
   </section>
 
@@ -223,6 +241,7 @@
 
   <!-- scripts (plain scripts so it runs over file://) -->
   <script src="js/config.js"></script>
+  <script src="js/menu.js"></script>
   <script src="js/donut-svg.js"></script>
   <script src="js/pricing.js"></script>
   <script src="js/pickup.js"></script>

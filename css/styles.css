@@ -54,6 +54,11 @@
 /* ------------------------------- Reset ----------------------------------- */
 *, *::before, *::after { box-sizing: border-box; }
 * { margin: 0; }
+
+/* Components set their own `display` (flex/grid/inline-flex), which outranks
+   the UA stylesheet's [hidden] rule — so anything toggled via el.hidden would
+   stay on screen. This makes `hidden` mean hidden everywhere. */
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; overflow-x: clip; }
 body {
   font-family: var(--font-ui);
@@ -126,6 +131,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.
   border-bottom: 1px solid var(--line);
 }
 .site-header__inner { display: flex; align-items: center; gap: 1rem; height: var(--header-h); }
+
+/* The header is sticky, so anchor jumps and scrollIntoView() would otherwise
+   tuck a section's heading underneath it. */
+#storeStep, #builder, #how, #stores { scroll-margin-top: calc(var(--header-h) + 1rem); }
 .brand { display: inline-flex; align-items: center; gap: 0.55rem; text-decoration: none; font-family: var(--font-display); }
 .brand__mark { display: grid; place-items: center; }
 .brand__name { font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; }
@@ -196,9 +205,43 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.
 .feature-card__actions { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem; margin-top: 0.75rem; }
 .feature-card__actions .btn { padding: 0.62rem 0.9rem; font-size: 0.88rem; }
 
+/* ---------------------------- Store step (1) ------------------------------
+   Store selection gates the builder: each store stocks its own icings and
+   sprinkle colors, so nothing below can render until one is chosen. */
+.store-step { padding-block: clamp(1rem, 3vw, 2rem) 0; }
+.section-heading--step { display: flex; align-items: center; gap: 0.6rem; }
+.step-num {
+  width: 1.5em; height: 1.5em; flex: none;
+  border-radius: 50%; background: var(--berry); color: #fff;
+  font-family: var(--font-ui); font-size: 0.5em; font-weight: 700;
+  display: grid; place-items: center;
+}
+.store-picker, .store-chosen {
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 1.2rem; box-shadow: var(--sh-1);
+}
+.store-picker__lede { font-size: 0.9rem; color: var(--ink-soft); margin-bottom: 0.9rem; line-height: 1.5; }
+.store-chosen__change { margin-top: 0.8rem; }
+
+/* what the chosen store can make */
+.menu-summary { margin-top: 0.8rem; font-size: 0.86rem; color: var(--ink-soft); }
+.menu-summary__line { margin-top: 0.3rem; line-height: 1.5; }
+.menu-summary__line strong { color: var(--ink); font-weight: 600; }
+.menu-summary__missing { color: var(--warn); }
+.menu-summary--full { color: var(--ok); font-weight: 500; }
+
 /* ------------------------------- Builder --------------------------------- */
 .builder { padding-block: clamp(1rem, 3vw, 2rem) 3rem; }
 .builder__grid { display: grid; gap: clamp(1.2rem, 3vw, 2.4rem); grid-template-columns: 1fr; }
+
+/* locked until a store is chosen — `inert` does the real blocking in JS,
+   this is the visual half */
+.builder.is-locked .builder__grid { opacity: 0.4; filter: saturate(0.4); pointer-events: none; user-select: none; }
+.builder__locked-note {
+  font-size: 0.92rem; color: var(--ink-soft); background: var(--cream-2);
+  border: 1px dashed var(--line-strong); border-radius: var(--r-sm);
+  padding: 0.8rem 1rem; margin-bottom: 1.2rem;
+}
 
 /* ---------------------------- Control panel ------------------------------ */
 .controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.1rem; align-content: start; }
@@ -526,7 +569,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.
 .store-open { color: var(--ok); font-weight: 600; }
 .store-closed { color: var(--warn); font-weight: 600; }
 
-.map-frame { position: relative; width: 100%; aspect-ratio: 16/10; border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line); margin-bottom: 0.8rem; background: var(--cream-2); }
+/* `isolation` is load-bearing: Leaflet gives its panes z-index up to 400+, and
+   without a stacking context here those escape to the root and paint over the
+   order drawer + its overlay (z-index 150/160) on the builder page. */
+.map-frame { position: relative; isolation: isolate; z-index: 0; width: 100%; aspect-ratio: 16/10; border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line); margin-bottom: 0.8rem; background: var(--cream-2); }
 .map-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
 /* Leaflet map fills the frame */
 .store-map { position: absolute; inset: 0; }
@@ -568,6 +614,36 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.
 .slot--low:not([aria-pressed="true"]) .slot__cap { color: var(--warn); }
 .notice { font-size: 0.84rem; color: var(--ink-soft); background: var(--cream-2); border: 1px dashed var(--line-strong); border-radius: var(--r-sm); padding: 0.7rem 0.85rem; }
 .notice--warn { color: var(--warn); border-color: #f3c6cf; background: #fdeef2; }
+
+/* ---------------------- Confirm dialog (store switch) --------------------- */
+.dlg-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(42, 32, 24, 0.45);
+  display: grid; place-items: center; padding: 1.2rem;
+  animation: dlgIn 0.18s var(--ease);
+}
+.dlg {
+  background: var(--paper); border-radius: var(--r-lg);
+  box-shadow: var(--sh-3); padding: 1.4rem;
+  width: min(100%, 30rem); max-height: 90vh; overflow-y: auto;
+}
+.dlg__title { font-size: 1.25rem; margin-bottom: 0.7rem; }
+.dlg__body { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.55; }
+.dlg__body p + p { margin-top: 0.7rem; }
+.dlg__actions { display: flex; gap: 0.6rem; justify-content: flex-end; margin-top: 1.2rem; flex-wrap: wrap; }
+.dlg-list { margin: 0.7rem 0; padding-left: 1.1rem; }
+.dlg-list li { margin-bottom: 0.4rem; }
+.dlg-list li strong { color: var(--ink); }
+.dlg-list__why { display: block; font-size: 0.82rem; color: var(--warn); }
+@keyframes dlgIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* premade boxes the chosen store can't make */
+.feature-card--unavailable .feature-card__art { opacity: 0.45; filter: saturate(0.35); }
+.feature-card__unavailable {
+  font-size: 0.82rem; color: var(--warn); background: #fdeef2;
+  border: 1px solid #f3c6cf; border-radius: var(--r-sm);
+  padding: 0.5rem 0.65rem; margin-top: 0.6rem; line-height: 1.45;
+}
 
 /* totals */
 .totals { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.35rem; }

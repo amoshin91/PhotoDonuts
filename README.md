@@ -23,6 +23,7 @@ python3 -m http.server 8000
 index.html        Page shell + mount points
 css/styles.css    Design system, components, responsive + reduced-motion
 js/config.js      ⭐ ALL tunable data (prices, palette, donut types, stores)
+js/menu.js        Per-store menu: what a store can make + design validation
 js/donut-svg.js   Layered, seeded SVG donut renderer
 js/pricing.js     Price + breakdown math
 js/pickup.js      Distance, geocode, timezone-aware slot generation
@@ -40,9 +41,43 @@ js/app.js         State + UI wiring (builder, cart, pickup, checkout)
 | Fillings / Icings                | `FILLINGS`, `ICINGS`                         |
 | Sprinkle palette                 | `SPRINKLE_PALETTE`, `MAX_SPRINKLE_COLORS`    |
 | Stores, hours, cutoffs, blackouts| `STORES`                                     |
+| What a store can make            | `STORES[n].menu`                             |
 | Lead time / increment / capacity | `SCHEDULING_DEFAULTS`                        |
 
 All pricing values are **placeholders** chosen to be easy to swap.
+
+### Per-store menus
+
+Stores don't all stock the same icings and sprinkle colors, so **the customer
+picks a store before the builder opens** and only sees what that store can make.
+Restrict a store by adding a `menu` block:
+
+```js
+{
+  id: "dunkin-345764",
+  // …hours, address, etc…
+  menu: {
+    icingIds: ["vanilla", "chocolate"],          // subset of ICINGS
+    sprinkleColorIds: ["red", "yellow", "blue"], // subset of SPRINKLE_PALETTE
+  },
+}
+```
+
+Omit `menu` (or either key) and the store offers **everything** in that
+category — a new store needs no menu config at all. Two effects are *derived*
+in `menu.js` rather than configured:
+
+- dropping `"custom"` from `icingIds` also removes the tie-dye / tint controls
+  **and** the Custom drizzle option (they share one color station);
+- a store missing any `RAINBOW_SPRINKLE_IDS` color loses the Rainbow preset.
+
+Donut types and fillings are the same at every store.
+
+Changing store with boxes already in the cart lists exactly which boxes the new
+store can't make and lets the customer remove just those or cancel the switch
+(`Menu.checkDesign`). The in-progress builder design is nudged onto the new
+menu instead (`Menu.coerceDesign`), and checkout re-validates the whole cart in
+case a store's menu changed between visits.
 
 ## Google Maps
 
