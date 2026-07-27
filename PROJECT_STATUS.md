@@ -130,6 +130,9 @@ Bug fixes:
 - [x] Builder form can no longer be implicitly submitted (page reload) by
       pressing Enter on the "No sprinkles" checkbox.
 - [x] Removed dead toast-timer code (cleared an unused timer handle).
+- [x] Pickup validation is skipped on boxes.html, which doesn't load pickup.js
+      — it read the persisted store through `Pickup` and threw on every load
+      for a returning visitor (swallowed by the load try/catch, but real).
 
 Validation & checkout UX:
 - [x] Checkout validation is field-level: offending inputs get `.is-invalid` +

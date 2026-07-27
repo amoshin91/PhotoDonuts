@@ -74,6 +74,9 @@
   function validatePersistedPickup() {
     const p = state.pickup;
     if (!p.storeId) return;
+    // boxes.html doesn't load pickup.js — nothing there reads the schedule, so
+    // leave the persisted pickup alone for the page that actually uses it.
+    if (typeof Pickup === "undefined") return;
     const store = DB.STORES.find((s) => s.id === p.storeId);
     if (!store) { p.storeId = null; p.dateStr = null; p.slotHm = null; return; }
     if (p.dateStr && p.dateStr < Pickup.minSelectableDate(store)) { p.dateStr = null; p.slotHm = null; return; }
