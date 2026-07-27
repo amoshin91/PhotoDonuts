@@ -576,7 +576,74 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.
 .map-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
 /* Leaflet map fills the frame */
 .store-map { position: absolute; inset: 0; }
-.leaflet-container { background: var(--cream-2); font: inherit; }
+.leaflet-container { background: #e8eaed; font: inherit; }
+
+/* ---- Google-Maps-like chrome for the Leaflet map ------------------------
+   Basemap cartography comes from the tile provider (DB.MAP_TILES); these
+   rules cover the parts Leaflet draws itself: controls, pins, info windows
+   and attribution. Colors are Google's UI greys/blues so the whole frame
+   reads as one map rather than default Leaflet blue-on-white. */
+
+/* zoom control: rounded white slab, bottom-right, soft shadow */
+.leaflet-control-zoom {
+  border: none !important;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.leaflet-touch .leaflet-control-zoom { border: none !important; }
+.leaflet-control-zoom a.leaflet-control-zoom-in,
+.leaflet-control-zoom a.leaflet-control-zoom-out {
+  width: 30px; height: 30px; line-height: 29px;
+  background: #fff; color: #666; border: none;
+  font-size: 1.35rem; font-weight: 400;
+}
+.leaflet-control-zoom a.leaflet-control-zoom-in { border-bottom: 1px solid #e6e6e6; }
+.leaflet-control-zoom a:hover { background: #f5f5f5; color: #222; }
+.leaflet-control-zoom a.leaflet-disabled { background: #fff; color: #c7c7c7; }
+.leaflet-bar a:focus-visible { outline: 3px solid var(--berry); outline-offset: -3px; }
+
+/* pins */
+.map-pin { background: none; border: none; }
+.map-pin svg { display: block; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)); }
+.map-pin:not(.map-pin--sel) svg { opacity: 0.9; }
+.map-pin { transition: transform var(--t-fast) var(--ease-spring); }
+.map-pin:hover { transform: translateY(-2px); z-index: 1200; }
+
+/* "you are here" — Google's blue dot with a translucent accuracy halo */
+.map-dot { background: none; border: none; position: relative; }
+.map-dot__halo {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: rgba(66, 133, 244, 0.18);
+}
+.map-dot__core {
+  position: absolute; left: 50%; top: 50%;
+  width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px;
+  border-radius: 50%; background: #4285f4;
+  border: 2.5px solid #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* info window */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  box-shadow: 0 2px 7px 1px rgba(0, 0, 0, 0.3);
+  padding: 1px;
+}
+.leaflet-popup-content { margin: 0.7rem 0.85rem; font-family: var(--font-ui); }
+.leaflet-popup-tip { box-shadow: none; }
+.map-iw__name { font-weight: 600; font-size: 0.88rem; color: #202124; }
+.map-iw__addr { font-size: 0.8rem; color: #5f6368; margin-top: 0.15rem; line-height: 1.4; }
+.map-iw__dist { display: block; font-size: 0.78rem; color: #1a73e8; margin-top: 0.25rem; font-weight: 500; }
+.leaflet-container a.leaflet-popup-close-button { color: #5f6368; padding: 6px 6px 0 0; }
+.leaflet-container a.leaflet-popup-close-button:hover { color: #202124; background: none; }
+
+/* attribution: quiet, like Google's corner credit (required — don't remove) */
+.leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.75);
+  color: #5f6368; font-size: 10px; padding: 1px 5px;
+}
+.leaflet-control-attribution a { color: #5f6368; text-decoration: none; }
+.leaflet-control-attribution a:hover { text-decoration: underline; }
 .leaflet-popup-content { font-size: 0.82rem; line-height: 1.35; }
 .leaflet-container a.leaflet-popup-close-button { color: var(--ink-soft); }
 .map-static { width: 100%; height: 100%; position: relative; display: grid; place-items: center; background:

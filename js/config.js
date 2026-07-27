@@ -332,6 +332,27 @@
      Left blank by default so the app runs with a graceful static fallback. */
   const GOOGLE_MAPS_API_KEY = "";
 
+  /* ---------------------------- MAP APPEARANCE ----------------------------
+     Basemap used by the free (no-key) Leaflet map. Default is CARTO Voyager,
+     whose cartography reads much closer to Google Maps than raw OSM tiles:
+     muted land, blue water, white roads with amber highways, restrained
+     labels. `{r}` becomes "@2x" on retina screens so the map stays sharp.
+
+     ATTRIBUTION IS REQUIRED and is rendered in the map corner — don't drop it.
+     Swap `url` for another provider if you prefer:
+       OSM standard   https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png
+       CARTO Positron https://{s}.basemaps.cartocdn.com/rastertiles/positron/{z}/{x}/{y}{r}.png
+       CARTO Voyager  https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png
+     CARTO basemaps are free to use with attribution; see carto.com/attributions
+     for their usage policy before shipping at scale. */
+  const MAP_TILES = {
+    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+    subdomains: "abcd",
+    maxZoom: 20,
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  };
+
   window.DB = {
     PRICING,
     DONUT_TYPES,
@@ -350,5 +371,6 @@
     SCHEDULING_DEFAULTS,
     GEO_LOOKUP,
     GOOGLE_MAPS_API_KEY,
+    MAP_TILES,
   };
 })();

@@ -175,6 +175,26 @@ Bugs found while building the above:
 - [x] Sticky header hid the target heading on every in-page anchor jump; added
       `scroll-margin-top` to the linked sections.
 
+### Google-Maps-style map (2026-07-27)
+The no-key Leaflet map now reads like Google Maps instead of stock OSM.
+
+- [x] Basemap moved from raw OSM tiles to CARTO Voyager (muted land, blue
+      water, white roads with amber highways, restrained labels), served @2x
+      on retina. Tile source is configurable via `MAP_TILES` in config.js and
+      documented in the README; the provider attribution is a licence
+      requirement and is kept in the map corner.
+- [x] Store markers are now inline-SVG red teardrop pins (selected one larger
+      and stacked above its neighbours) instead of Leaflet's default blue PNG
+      marker — sharp on retina, and two fewer image requests.
+- [x] "Your location" is Google's blue dot: white-ringed core in a soft halo.
+- [x] Zoom control restyled as a rounded white slab in the bottom-right;
+      popups restyled as Google-style info windows (name / address / distance)
+      and the attribution made quiet.
+- [x] Bug: the selected store's info window never opened. `openPopup()` ran
+      before `setView()`/`fitBounds()` gave the map a centre, so Leaflet had
+      nothing to anchor to and the call silently no-opped. The view is now set
+      before markers are added. (Pre-existing — the popup had never appeared.)
+
 Validation & checkout UX:
 - [x] Checkout validation is field-level: offending inputs get `.is-invalid` +
       `aria-invalid`, and focus jumps to the first problem (was: one error

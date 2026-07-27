@@ -1126,45 +1126,95 @@
       </div></div>`;
   }
 
-  // ---- free interactive map (Leaflet + OpenStreetMap tiles) ---------------
+  // ---- free interactive map (Leaflet + CARTO/OSM tiles) -------------------
+  /* Styled to read like Google Maps: Voyager basemap (see DB.MAP_TILES), red
+     teardrop pins, a blue "you are here" dot, and rounded zoom controls in the
+     bottom-right. Pins are inline-SVG divIcons rather than Leaflet's default
+     PNG marker — same look on retina, and no extra image requests. */
   let _storeMap = null;
   function destroyStoreMap() {
     if (_storeMap) { try { _storeMap.remove(); } catch (e) {} _storeMap = null; }
   }
+
+  // Google-style red teardrop. `selected` gets the full-size, saturated pin.
+  function storePinIcon(selected) {
+    const w = selected ? 27 : 22;
+    const h = Math.round(w * (36 / 26));
+    return L.divIcon({
+      className: "map-pin" + (selected ? " map-pin--sel" : ""),
+      html: `<svg width="${w}" height="${h}" viewBox="0 0 26 36" aria-hidden="true">
+          <path d="M13 .8C6.3.8.9 6.2.9 12.9c0 4.5 2.6 9.5 5.3 13.4a60 60 0 0 0 6.8 8.4 60 60 0 0 0 6.8-8.4c2.7-3.9 5.3-8.9 5.3-13.4C25.1 6.2 19.7.8 13 .8z"
+                fill="${selected ? "#ea4335" : "#d93025"}" stroke="#a50e0e" stroke-width="1.1"/>
+          <circle cx="13" cy="12.9" r="4.4" fill="#a50e0e"/>
+        </svg>`,
+      iconSize: [w, h],
+      iconAnchor: [w / 2, h],
+      popupAnchor: [0, -h + 4],
+    });
+  }
+
   function initStoreMap() {
     destroyStoreMap();
     const el = document.getElementById("storeMap");
     if (!el || typeof L === "undefined") return;
     const p = state.pickup;
     const stores = Pickup.sortStoresByDistance(p.location);
-    const map = L.map(el, { scrollWheelZoom: false });
+    // zoom control is re-added bottom-right, the way Google places it
+    const map = L.map(el, { scrollWheelZoom: false, zoomControl: false });
     _storeMap = map;
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+
+    const t = DB.MAP_TILES;
+    L.tileLayer(t.url, {
+      subdomains: t.subdomains || "abc",
+      maxZoom: t.maxZoom || 19,
+      attribution: t.attribution,
+      detectRetina: false,
+      // serve @2x tiles on retina so labels stay crisp, like Google's
+      r: L.Browser.retina ? "@2x" : "",
     }).addTo(map);
 
-    const pts = [];
+    // Set the view BEFORE adding markers: Leaflet can't position a popup on a
+    // map that has no centre yet, so opening one here would silently no-op.
+    const pts = stores.map((s) => [s.lat, s.lng]);
+    if (p.location) pts.push([p.location.lat, p.location.lng]);
+    const sel = stores.find((s) => s.id === p.storeId);
+    if (sel) map.setView([sel.lat, sel.lng], 14);
+    else if (pts.length) map.fitBounds(pts, { padding: [34, 34], maxZoom: 14 });
+    else map.setView([40.78, -73.47], 10); // Long Island default
+
     stores.forEach((s) => {
       const isSel = s.id === p.storeId;
-      const marker = L.marker([s.lat, s.lng], { opacity: isSel ? 1 : 0.82 }).addTo(map);
-      const dist = s.distance != null ? ` · ${s.distance.toFixed(1)} mi` : "";
-      marker.bindPopup(`<strong>${escapeHtml(s.name)}</strong><br>${escapeHtml(s.address)}${dist}`);
+      const marker = L.marker([s.lat, s.lng], {
+        icon: storePinIcon(isSel),
+        zIndexOffset: isSel ? 1000 : 0, // selected pin sits above its neighbours
+        title: s.name,
+      }).addTo(map);
+      const dist = s.distance != null ? `<span class="map-iw__dist">${s.distance.toFixed(1)} mi away</span>` : "";
+      marker.bindPopup(
+        `<div class="map-iw">
+           <div class="map-iw__name">${escapeHtml(s.name)}</div>
+           <div class="map-iw__addr">${escapeHtml(s.address)}</div>
+           ${dist}
+         </div>`
+      );
       marker.on("click", () => { pickStore(s.id); });
       if (isSel) marker.openPopup();
-      pts.push([s.lat, s.lng]);
     });
 
     if (p.location) {
-      L.circleMarker([p.location.lat, p.location.lng], { radius: 7, weight: 2, color: "#fff", fillColor: "#d6336c", fillOpacity: 1 })
-        .addTo(map).bindPopup("Your location");
-      pts.push([p.location.lat, p.location.lng]);
+      // Google's blue location dot: white-ringed core inside a soft halo
+      L.marker([p.location.lat, p.location.lng], {
+        icon: L.divIcon({
+          className: "map-dot",
+          html: `<span class="map-dot__halo"></span><span class="map-dot__core"></span>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+          popupAnchor: [0, -12],
+        }),
+        zIndexOffset: 500,
+      }).addTo(map).bindPopup(`<div class="map-iw"><div class="map-iw__name">Your location</div></div>`);
     }
-
-    const sel = stores.find((s) => s.id === p.storeId);
-    if (sel) map.setView([sel.lat, sel.lng], 13);
-    else if (pts.length) map.fitBounds(pts, { padding: [28, 28], maxZoom: 13 });
-    else map.setView([40.78, -73.47], 10); // Long Island default
     // the drawer animates in; recompute size once layout has settled
     setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 90);
   }

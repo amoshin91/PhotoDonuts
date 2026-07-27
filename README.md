@@ -43,6 +43,7 @@ js/app.js         State + UI wiring (builder, cart, pickup, checkout)
 | Stores, hours, cutoffs, blackouts| `STORES`                                     |
 | What a store can make            | `STORES[n].menu`                             |
 | Lead time / increment / capacity | `SCHEDULING_DEFAULTS`                        |
+| Map basemap / tile provider      | `MAP_TILES`                                  |
 
 All pricing values are **placeholders** chosen to be easy to swap.
 
@@ -91,6 +92,21 @@ const GOOGLE_MAPS_API_KEY = "your-key"; // in js/config.js
 with the **Maps Embed API** enabled. For real-world location search, replace the
 demo `GEO_LOOKUP` table / `Pickup.resolveLocation()` with a call to the Google
 **Geocoding API**.
+
+### The no-key map
+
+Without a key the app still shows a full interactive map (Leaflet), styled to
+read like Google Maps: the **CARTO Voyager** basemap (muted land, blue water,
+white roads with amber highways), red teardrop pins with the selected store
+enlarged, a blue "your location" dot, a Google-style info window, and rounded
+zoom controls in the bottom-right. Pins are inline SVG, so they stay sharp on
+retina and cost no extra image requests.
+
+Change the basemap in `MAP_TILES` (`js/config.js`) — alternatives are listed in
+a comment there. **The attribution string is a licence requirement of the tile
+providers; keep it.** CARTO basemaps are free with attribution — review
+[carto.com/attributions](https://carto.com/attributions) before shipping at
+scale, or point `MAP_TILES.url` at your own tile source.
 
 ## Notable behaviors
 
