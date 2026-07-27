@@ -1,6 +1,6 @@
 # Glaze & Co. — Donut Builder · Project Status & Roadmap
 
-Last updated: 2026-06-25
+Last updated: 2026-07-02
 
 This document tracks what has been built and what remains to take the site from a
 working front-end prototype to a fully functional, live, production service.
@@ -101,6 +101,63 @@ Legend:  [x] done   [~] partial / mocked   [ ] not started
       (pricing, distance, timezone scheduling, SVG determinism + even density).
 - [x] README.md documents how to run and where to change values.
 
+### Functional hardening pass (2026-07-02)
+Site-wide review; each item below was implemented and re-verified headless.
+
+Bug fixes:
+- [x] Checkout re-renders no longer wipe the payment fields — card / expiry /
+      CVC now survive picking a store, day, slot, or changing quantities. They
+      live in MEMORY ONLY and are deliberately never written to localStorage;
+      they're cleared as soon as the order is placed.
+- [x] Stale persisted pickup state is validated on load: a store id that no
+      longer exists in config, a pickup date now in the past, or a slot that
+      has filled / fallen inside the lead time is dropped instead of jamming
+      the date picker (previously a returning visitor could land on a past
+      date with every time greyed out and no explanation).
+- [x] `pickupComplete()` guards against an unknown store id (config changes
+      between visits previously crashed the checkout page).
+- [x] Slot capacity now accounts for ORDER SIZE: a slot must have room for all
+      of the order's dozens, not just 1. Slots without room are disabled
+      ("Only N left"), day chips reflect it, and orders larger than the
+      per-slot cap get a clear "call the store" notice instead of a silently
+      impossible picker. The pay button revalidates the same rule.
+- [x] "Update box" after the box was removed from the cart now adds the design
+      as a new box instead of silently discarding the user's work; removing
+      the box being edited also resets the builder's editing state.
+- [x] The 12-donut grid rendered one SVG string 12 times → 12 sets of
+      duplicate gradient/clipPath ids in the DOM. Each cell now renders its
+      own SVG (unique ids; identical look via the fixed seed).
+- [x] Builder form can no longer be implicitly submitted (page reload) by
+      pressing Enter on the "No sprinkles" checkbox.
+- [x] Removed dead toast-timer code (cleared an unused timer handle).
+
+Validation & checkout UX:
+- [x] Checkout validation is field-level: offending inputs get `.is-invalid` +
+      `aria-invalid`, and focus jumps to the first problem (was: one error
+      sentence only).
+- [x] Card number auto-formats in groups of 4; expiry auto-formats as MM / YY;
+      CVC digits-only. Card number is Luhn-checked and expiry must be a real
+      future month (still a demo form — use 4242 4242 4242 4242; real payments
+      move to Stripe per the plan below). Payment inputs also gained proper
+      `autocomplete="cc-*"` attributes and aria-labels.
+- [x] Location search (Nominatim) aborts after 8s so the Search button can't
+      hang forever on a dead network.
+
+Accessibility:
+- [x] Focus trap on the order drawer — it's `aria-modal` but Tab could
+      previously escape into the page behind it.
+
+Performance:
+- [x] `Intl.DateTimeFormat` is now cached per timezone in pickup.js — it was
+      constructed fresh for every slot of every day chip (hundreds per
+      checkout render); 12 days of slot generation now measures ~7 ms.
+
+Security / SEO polish:
+- [x] Subresource Integrity (SRI) hashes on the Leaflet CDN css/js (hashes
+      verified against the published 1.9.4 files).
+- [x] Open Graph + Twitter card meta tags on both pages (og:image still
+      pending real brand assets — see §11).
+
 
 ================================================================================
 ## 🔧 TO DO — to make it fully functional and live
@@ -188,7 +245,8 @@ service. Roughly ordered by what blocks "going live."
 - [ ] Move from CDN Google Fonts to self-hosted/subset for performance & privacy;
       confirm font licensing (Fraunces & Inter are OFL — OK, but verify usage).
 - [ ] Optimize: bundle/minify, cache headers, lazy-load below-the-fold.
-- [ ] SEO: meta/OpenGraph tags, sitemap, structured data, favicon set / PWA icons.
+- [~] SEO: basic OpenGraph/Twitter meta added (2026-07-02); still needs
+      og:image, sitemap, structured data, favicon set / PWA icons.
 - [ ] Real food photography / brand assets (logo currently inline SVG placeholder).
 - [ ] Final brand copy review (hero, how-it-works, store details are placeholders).
 

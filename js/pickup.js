@@ -74,11 +74,14 @@
     if (!q) return null;
     const local = resolveLocation(q);
     if (local) return local;
+    // abort after 8s so the Search button can't hang forever on a dead network
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
     try {
       const url =
         "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=us&q=" +
         encodeURIComponent(q);
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      const res = await fetch(url, { headers: { Accept: "application/json" }, signal: ctrl ? ctrl.signal : undefined });
       if (!res.ok) return null;
       const data = await res.json();
       if (!data || !data.length) return null;
@@ -88,23 +91,35 @@
       return { lat, lng, label: shortLabel(r) };
     } catch (e) {
       return null;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
   // ---- timezone helpers -----------------------------------------------------
+  // Intl.DateTimeFormat construction is expensive and partsInZone runs for
+  // every slot of every day chip — cache one formatter per timezone.
+  const _zoneFmtCache = {};
+  function zoneFormatter(tz) {
+    if (!_zoneFmtCache[tz]) {
+      _zoneFmtCache[tz] = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        hour12: false,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        weekday: "short",
+      });
+    }
+    return _zoneFmtCache[tz];
+  }
+
   // Wall-clock parts for an instant in a given IANA tz.
   function partsInZone(tz, instant) {
-    const dtf = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz,
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      weekday: "short",
-    });
+    const dtf = zoneFormatter(tz);
     const p = {};
     for (const part of dtf.formatToParts(instant)) p[part.type] = part.value;
     return {

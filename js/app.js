@@ -40,6 +40,10 @@
 
   let nextBoxId = 1;
 
+  // Card fields live in memory only — they survive checkout re-renders (picking
+  // a store/day/slot rebuilds the DOM) but are never written to localStorage.
+  const payment = { card: "", exp: "", cvc: "" };
+
   /* --------------------- PERSISTENCE (localStorage) ---------------------- */
   /* Cart + pickup + checkout survive navigation to the separate checkout page
      (and a page refresh). The in-progress builder design is NOT persisted. */
@@ -60,7 +64,24 @@
       if (typeof d.nextBoxId === "number") nextBoxId = d.nextBoxId;
       if (d.pickup) state.pickup = Object.assign(state.pickup, d.pickup);
       if (d.checkout) state.checkout = Object.assign(state.checkout, d.checkout);
+      validatePersistedPickup();
     } catch (e) {}
+  }
+
+  // Persisted pickup can go stale between visits: the store may no longer
+  // exist (config change), the date may now be in the past, or the slot may
+  // have filled / fallen inside the lead time. Drop whatever no longer holds.
+  function validatePersistedPickup() {
+    const p = state.pickup;
+    if (!p.storeId) return;
+    const store = DB.STORES.find((s) => s.id === p.storeId);
+    if (!store) { p.storeId = null; p.dateStr = null; p.slotHm = null; return; }
+    if (p.dateStr && p.dateStr < Pickup.minSelectableDate(store)) { p.dateStr = null; p.slotHm = null; return; }
+    if (p.dateStr && p.slotHm) {
+      const res = Pickup.generateSlots(store, p.dateStr);
+      const slot = res.slots.find((s) => s.hm === p.slotHm);
+      if (!slot || !slot.available) p.slotHm = null;
+    }
   }
   function clearPersisted() { try { localStorage.removeItem(LS_KEY); } catch (e) {} }
 
@@ -504,9 +525,11 @@
   function renderDozen() {
     const grid = $("#dozenGrid");
     const resolved = resolveDesign(state.design);
-    const svg = DonutSVG.render(resolved, { size: 100, decorative: true });
     let html = "";
     for (let i = 0; i < DB.BOX_SIZE; i++) {
+      // render per cell so each SVG gets unique gradient/clip ids (no duplicate
+      // DOM ids); the fixed seed keeps all 12 visually identical
+      const svg = DonutSVG.render(resolved, { size: 100, decorative: true });
       html += `<div class="dozen__cell" style="animation-delay:${i * 22}ms">${svg}</div>`;
     }
     grid.innerHTML = html;
@@ -584,9 +607,15 @@
     const design = JSON.parse(JSON.stringify(state.design));
     if (state.editingBoxId) {
       const box = state.cart.boxes.find((b) => b.id === state.editingBoxId);
-      if (box) box.design = design;
+      if (box) {
+        box.design = design;
+        toast("Box updated");
+      } else {
+        // the box being edited was removed from the cart — keep the design
+        state.cart.boxes.push({ id: nextBoxId++, design, qty: 1 });
+        toast("Box added to your order");
+      }
       state.editingBoxId = null;
-      toast("Box updated");
     } else {
       state.cart.boxes.push({ id: nextBoxId++, design, qty: 1 });
       toast("Box added to your order");
@@ -616,6 +645,10 @@
   }
   function removeBox(id) {
     state.cart.boxes = state.cart.boxes.filter((b) => b.id !== id);
+    if (state.editingBoxId === id) {
+      state.editingBoxId = null;
+      if (!document.getElementById("checkoutMain")) update(); // "Update box" → "Add box to order"
+    }
     syncCartCount();
     refreshPanel();
   }
@@ -669,6 +702,11 @@
     const email = $("#coEmail", body); if (email) state.checkout.email = email.value;
     const phone = $("#coPhone", body); if (phone) state.checkout.phone = phone.value;
     const consent = $("#coConsent", body); if (consent) state.checkout.consent = consent.checked;
+    // card fields: kept in memory only so re-renders don't wipe them —
+    // deliberately NOT persisted to localStorage
+    const card = $("#coCard", body); if (card) payment.card = card.value;
+    const exp = $("#coExp", body); if (exp) payment.exp = exp.value;
+    const cvc = $("#coCvc", body); if (cvc) payment.cvc = cvc.value;
     persist();
   }
 
@@ -882,17 +920,24 @@
     setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 90);
   }
 
+  // a slot only works for this order if it can hold ALL of its dozens
+  function slotFitsOrder(s, need) {
+    return s.passesLead && s.remaining >= need;
+  }
+
   function renderDateTime(store) {
     const p = state.pickup;
+    const need = Math.max(1, dozenCount());
+    const cap = DB.SCHEDULING_DEFAULTS.slotCapacityDozen;
     const minDate = Pickup.minSelectableDate(store);
-    if (!p.dateStr) p.dateStr = firstOpenDate(store, minDate);
+    if (!p.dateStr) p.dateStr = firstOpenDate(store, minDate, need);
 
     // day chips for the next 12 days
     let chips = "";
     for (let i = 0; i < 12; i++) {
       const ds = Pickup.addDays(minDate, i);
       const res = Pickup.generateSlots(store, ds);
-      const disabled = res.closed || !res.slots.some((s) => s.available);
+      const disabled = res.closed || !res.slots.some((s) => slotFitsOrder(s, need));
       const [y, m, d] = ds.split("-").map(Number);
       const dow = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
       const mon = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
@@ -903,22 +948,25 @@
 
     const slotData = Pickup.generateSlots(store, p.dateStr);
     let slotsHtml;
-    if (slotData.closed) {
+    if (need > cap) {
+      slotsHtml = `<p class="notice notice--warn">This order is ${need} dozen — more than the ${cap}-dozen-per-slot limit. Please call the store to arrange a large order.</p>`;
+    } else if (slotData.closed) {
       slotsHtml = `<p class="notice notice--warn">${slotData.reason}</p>`;
-    } else if (!slotData.slots.some((s) => s.available)) {
-      slotsHtml = `<p class="notice">${slotData.reason || "No remaining pickup times for this day."}</p>`;
+    } else if (!slotData.slots.some((s) => slotFitsOrder(s, need))) {
+      slotsHtml = `<p class="notice">${need > 1 ? `No time on this day has room for all ${need} dozen — try another day.` : slotData.reason || "No remaining pickup times for this day."}</p>`;
     } else {
       slotsHtml = `<div class="slots">` + slotData.slots.map((s) => {
         if (!s.passesLead) return ""; // hide past / too-soon times entirely
-        const full = s.remaining <= 0;
-        const low = s.remaining > 0 && s.remaining < 5;
-        const cap = full ? "Full" : `${s.remaining} left`;
+        const full = !slotFitsOrder(s, need);
+        const low = !full && s.remaining < need + 4;
+        const cap = s.remaining <= 0 ? "Full" : full ? `Only ${s.remaining} left` : `${s.remaining} left`;
         return `<button class="slot ${low ? "slot--low" : ""}" type="button" data-slot="${s.hm}" aria-pressed="${s.hm === p.slotHm}" ${full ? "disabled aria-disabled=true" : ""}>
           ${s.label}<span class="slot__cap">${cap}</span>
         </button>`;
       }).join("") + `</div>`;
     }
 
+    const needTxt = need > 1 ? ` · your order needs room for ${need} dozen` : "";
     return `
       <div class="field" style="margin-top:1rem">
         <span class="field-label">Pickup day <span style="font-weight:500;color:var(--ink-faint)">(${tzShort(store.timezone)})</span></span>
@@ -927,15 +975,15 @@
       <div class="field">
         <span class="field-label">Pickup time · 30-min windows</span>
         ${slotsHtml}
-        <p class="field-note" style="margin-top:.5rem">30-min minimum lead time · same-day cutoff &amp; store hours applied · ${DB.SCHEDULING_DEFAULTS.slotCapacityDozen} dozen per slot.</p>
+        <p class="field-note" style="margin-top:.5rem">30-min minimum lead time · same-day cutoff &amp; store hours applied · ${cap} dozen per slot${needTxt}.</p>
       </div>`;
   }
 
-  function firstOpenDate(store, minDate) {
+  function firstOpenDate(store, minDate, need) {
     for (let i = 0; i < 14; i++) {
       const ds = Pickup.addDays(minDate, i);
       const res = Pickup.generateSlots(store, ds);
-      if (!res.closed && res.slots.some((s) => s.available)) return ds;
+      if (!res.closed && res.slots.some((s) => slotFitsOrder(s, need))) return ds;
     }
     return minDate;
   }
@@ -944,9 +992,10 @@
     const p = state.pickup;
     if (!p.storeId || !p.dateStr || !p.slotHm) return false;
     const store = DB.STORES.find((s) => s.id === p.storeId);
+    if (!store) return false;
     const res = Pickup.generateSlots(store, p.dateStr);
     const slot = res.slots.find((s) => s.hm === p.slotHm);
-    return !!(slot && slot.available);
+    return !!(slot && slotFitsOrder(slot, Math.max(1, dozenCount())));
   }
 
   /* ------------------------------ CHECKOUT ------------------------------- */
@@ -992,10 +1041,10 @@
         <p class="field-label" style="margin:1rem 0 .4rem">Payment</p>
         <div class="pay-card">
           <div class="pay-card__row"><span>Pay online now</span><span>🔒 Secure</span></div>
-          <input class="input input--full input-dark" id="coCard" inputmode="numeric" placeholder="Card number" style="margin:.6rem 0" />
+          <input class="input input--full input-dark" id="coCard" inputmode="numeric" autocomplete="cc-number" placeholder="Card number" aria-label="Card number" value="${escapeHtml(payment.card)}" style="margin:.6rem 0" />
           <div class="form-grid form-grid--2">
-            <input class="input input--full input-dark" id="coExp" inputmode="numeric" placeholder="MM / YY" />
-            <input class="input input--full input-dark" id="coCvc" inputmode="numeric" placeholder="CVC" />
+            <input class="input input--full input-dark" id="coExp" inputmode="numeric" autocomplete="cc-exp" placeholder="MM / YY" aria-label="Expiration date" value="${escapeHtml(payment.exp)}" />
+            <input class="input input--full input-dark" id="coCvc" inputmode="numeric" autocomplete="cc-csc" placeholder="CVC" aria-label="Security code" maxlength="4" value="${escapeHtml(payment.cvc)}" />
           </div>
         </div>
 
@@ -1076,6 +1125,20 @@
 
     $$(".seg__btn", root).forEach((b) => b.addEventListener("click", () => { captureCheckoutInputs(); state.checkout.mode = b.dataset.mode; renderCheckoutPage(); }));
 
+    // live formatting: card in groups of 4, expiry as MM / YY
+    const cardEl = $("#coCard", root);
+    if (cardEl) cardEl.addEventListener("input", () => {
+      const digits = cardEl.value.replace(/\D/g, "").slice(0, 19);
+      cardEl.value = digits.replace(/(.{4})/g, "$1 ").trim();
+    });
+    const expEl = $("#coExp", root);
+    if (expEl) expEl.addEventListener("input", () => {
+      let digits = expEl.value.replace(/\D/g, "").slice(0, 4);
+      expEl.value = digits.length >= 3 ? digits.slice(0, 2) + " / " + digits.slice(2) : digits;
+    });
+    const cvcEl = $("#coCvc", root);
+    if (cvcEl) cvcEl.addEventListener("input", () => { cvcEl.value = cvcEl.value.replace(/\D/g, "").slice(0, 4); });
+
     const place = $("#placeOrder", root);
     if (place) place.addEventListener("click", placeOrder);
   }
@@ -1140,22 +1203,53 @@
   }
 
   /* ----------------------------- PLACE ORDER ----------------------------- */
+  // Luhn checksum — catches typos in the demo card field. (Real payments will
+  // move to Stripe Elements; see PROJECT_STATUS.)
+  function luhnOk(num) {
+    const d = num.replace(/\D/g, "");
+    if (d.length < 13 || d.length > 19) return false;
+    let sum = 0, alt = false;
+    for (let i = d.length - 1; i >= 0; i--) {
+      let n = +d[i];
+      if (alt) { n *= 2; if (n > 9) n -= 9; }
+      sum += n;
+      alt = !alt;
+    }
+    return sum % 10 === 0;
+  }
+  function expiryOk(v) {
+    const m = v.replace(/\s/g, "").match(/^(\d{2})\/?(\d{2})$/);
+    if (!m) return false;
+    const mm = +m[1], yy = 2000 + +m[2];
+    if (mm < 1 || mm > 12) return false;
+    const now = new Date();
+    return yy > now.getFullYear() || (yy === now.getFullYear() && mm >= now.getMonth() + 1);
+  }
+
   function placeOrder() {
     captureCheckoutInputs();
     const c = state.checkout;
     const body = panelRoot();
     const err = $("#coError", body);
-    const problems = [];
-    if (!c.name.trim()) problems.push("name");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim())) problems.push("a valid email");
-    if (c.phone.replace(/\D/g, "").length < 10) problems.push("a 10-digit mobile number");
-    const card = ($("#coCard", body) || {}).value || "";
-    if (card.replace(/\D/g, "").length < 15) problems.push("a valid card number");
-    if (!c.consent) problems.push("confirmation consent");
+    const problems = []; // { sel, msg } — sel marks the offending field
+    if (!c.name.trim()) problems.push({ sel: "#coName", msg: "your name" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim())) problems.push({ sel: "#coEmail", msg: "a valid email" });
+    if (c.phone.replace(/\D/g, "").length < 10) problems.push({ sel: "#coPhone", msg: "a 10-digit mobile number" });
+    if (!luhnOk(payment.card)) problems.push({ sel: "#coCard", msg: "a valid card number" });
+    if (!expiryOk(payment.exp)) problems.push({ sel: "#coExp", msg: "a valid expiration (MM / YY)" });
+    if (payment.cvc.replace(/\D/g, "").length < 3) problems.push({ sel: "#coCvc", msg: "the card's CVC" });
+    if (!c.consent) problems.push({ sel: "#coConsent", msg: "confirmation consent" });
 
+    $$(".input", body).forEach((i) => { i.classList.remove("is-invalid"); i.removeAttribute("aria-invalid"); });
     if (problems.length) {
+      problems.forEach((p) => {
+        const el = $(p.sel, body);
+        if (el && el.classList.contains("input")) { el.classList.add("is-invalid"); el.setAttribute("aria-invalid", "true"); }
+      });
       err.hidden = false;
-      err.textContent = "Please add " + problems.join(", ") + ".";
+      err.textContent = "Please add " + problems.map((p) => p.msg).join(", ") + ".";
+      const first = $(problems[0].sel, body);
+      if (first && first.focus) first.focus();
       err.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -1174,6 +1268,7 @@
     };
     // order submitted — clear the working cart so a refresh doesn't re-checkout
     state.cart.boxes = [];
+    payment.card = payment.exp = payment.cvc = "";
     clearPersisted();
     renderConfirmation();
   }
@@ -1260,14 +1355,12 @@
     return String(s == null ? "" : s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
   }
 
-  let toastTimer;
   function toast(msg, warn) {
     const region = $("#toastRegion");
     const el = document.createElement("div");
     el.className = "toast";
     el.innerHTML = `<span class="toast__dot" style="${warn ? "background:var(--warn)" : ""}"></span><span>${escapeHtml(msg)}</span>`;
     region.appendChild(el);
-    clearTimeout(toastTimer);
     setTimeout(() => { el.classList.add("is-leaving"); setTimeout(() => el.remove(), 320); }, 2600);
   }
 
@@ -1436,11 +1529,28 @@
     });
     window.addEventListener("load", autoManageDozen);
 
+    // the builder form has no submit button — block implicit submission
+    // (e.g. Enter on the "No sprinkles" checkbox) from reloading the page
+    $("#controls").addEventListener("submit", (e) => e.preventDefault());
+
     $("#addToCart").addEventListener("click", addOrUpdateBox);
     $("#cartButton").addEventListener("click", () => { openDrawer(); renderDrawer(); });
     $("#closeDrawer").addEventListener("click", closeDrawer);
     $("#drawerOverlay").addEventListener("click", closeDrawer);
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#orderDrawer").hidden) closeDrawer(); });
+
+    // focus trap: the drawer is aria-modal, so Tab must not escape into the
+    // page behind it while it's open
+    $("#orderDrawer").addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;
+      const focusables = $$('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])', $("#orderDrawer"))
+        .filter((el) => !el.disabled && el.offsetParent !== null);
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
 
     update();
     syncCartCount();
