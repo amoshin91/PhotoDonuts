@@ -1453,7 +1453,7 @@
         </div>
         <div class="field">
           <label class="field-label" for="uEmail">Email</label>
-          <input class="input input--full" id="uEmail" type="email" value="${escapeHtml(ed.email)}" placeholder="robin@glaze.co" />
+          <input class="input input--full" id="uEmail" type="email" value="${escapeHtml(ed.email)}" placeholder="robin@photodonuts.co" />
         </div>
         <div class="field">
           <label class="field-label" for="uRole">Role</label>
@@ -1545,7 +1545,7 @@
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
-          a.download = "glaze-store-settings.json";
+          a.download = "photo-donuts-store-settings.json";
           // Safari ignores click() on a link that isn't in the document.
           document.body.appendChild(a);
           a.click();

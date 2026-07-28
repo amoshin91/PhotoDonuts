@@ -24,8 +24,15 @@
 (function () {
   "use strict";
 
-  const USERS_KEY = "glaze_users_v1";
-  const SESSION_KEY = "glaze_session_v1";
+  /* Deliberately NOT migrated from the old glaze_* keys at the rename.
+     The seeded addresses moved to @photodonuts.co, and login.html advertises
+     them; carrying the old records over would leave the page listing accounts
+     that don't exist. Bumping the key re-seeds cleanly instead. The cost is
+     that any hand-made accounts in a browser are lost and everyone is signed
+     out once — acceptable for demo credentials, and it does not touch store
+     settings or carts, which DO migrate (see settings.js / app.js). */
+  const USERS_KEY = "photodonuts_users_v1";
+  const SESSION_KEY = "photodonuts_session_v1";
 
   /* -------------------------------- ROLES --------------------------------- */
   /* `scope` decides which stores a user reaches:
@@ -64,7 +71,7 @@
     {
       id: "u-admin",
       name: "Avery Cole",
-      email: "admin@glaze.co",
+      email: "admin@photodonuts.co",
       password: "donut123",
       role: "admin",
       storeIds: [],
@@ -72,7 +79,7 @@
     {
       id: "u-cml",
       name: "Chris Vitale",
-      email: "cml@glaze.co",
+      email: "cml@photodonuts.co",
       password: "donut123",
       role: "cml",
       // an owner with three Long Island locations
@@ -81,7 +88,7 @@
     {
       id: "u-manager",
       name: "Robin Ortiz",
-      email: "manager@glaze.co",
+      email: "manager@photodonuts.co",
       password: "donut123",
       role: "manager",
       storeIds: ["dunkin-345764"],

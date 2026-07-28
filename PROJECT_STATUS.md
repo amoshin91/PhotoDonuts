@@ -1,4 +1,4 @@
-# Glaze & Co. — Donut Builder · Project Status & Roadmap
+# Photo Donuts — Donut Builder · Project Status & Roadmap
 
 Last updated: 2026-07-28
 

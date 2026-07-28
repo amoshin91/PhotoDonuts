@@ -132,16 +132,16 @@ let adminStorage;
 
   // clicking a demo row fills the form
   click(w, rows[0]);
-  eq("demo row fills the email", doc.getElementById("email").value, "admin@glaze.co");
+  eq("demo row fills the email", doc.getElementById("email").value, "admin@photodonuts.co");
 
   // wrong password shows an error and no session
   doc.getElementById("password").value = "nope";
   doc.getElementById("loginForm").dispatchEvent(new w.Event("submit", { bubbles: true, cancelable: true }));
   eq("error shown for a bad password", doc.getElementById("loginError").hidden, false);
-  eq("no session written", w.localStorage.getItem("glaze_session_v1"), null);
+  eq("no session written", w.localStorage.getItem("photodonuts_session_v1"), null);
 
-  adminStorage = signIn("admin@glaze.co", "donut123");
-  ok("admin session created", !!adminStorage["glaze_session_v1"]);
+  adminStorage = signIn("admin@photodonuts.co", "donut123");
+  ok("admin session created", !!adminStorage["photodonuts_session_v1"]);
 }
 
 console.log("\nDASHBOARD — admin sees everything");
@@ -165,7 +165,7 @@ console.log("\nDASHBOARD — admin sees everything");
 
 console.log("\nDASHBOARD — CML is scoped to its group");
 {
-  const storage = signIn("cml@glaze.co", "donut123");
+  const storage = signIn("cml@photodonuts.co", "donut123");
   const { doc } = load("dashboard.html", storage);
   const nav = Array.from(doc.querySelectorAll(".dash-nav__item")).map((b) => b.dataset.section);
   eq("no users/tools sections", nav.join(","), "menu,hours,windows,pricing,boxes");
@@ -177,7 +177,7 @@ console.log("\nDASHBOARD — CML is scoped to its group");
 
 console.log("\nDASHBOARD — manager is locked to one store");
 {
-  const storage = signIn("manager@glaze.co", "donut123");
+  const storage = signIn("manager@photodonuts.co", "donut123");
   const { doc } = load("dashboard.html", storage);
   const nav = Array.from(doc.querySelectorAll(".dash-nav__item")).map((b) => b.dataset.section);
   eq("store sections only", nav.join(","), "menu,hours,windows,pricing,boxes");
@@ -275,7 +275,7 @@ console.log("\nSTOREFRONT — checkout copy reflects the new windows");
     pickup: { location: null, locationLabel: "", storeId: "dunkin-345764", dateStr: null, slotHm: null },
     checkout: { mode: "guest", name: "", email: "", phone: "", consent: false },
   });
-  const storage = Object.assign({}, windowStorage, { glaze_order_v1: cart });
+  const storage = Object.assign({}, windowStorage, { photodonuts_order_v1: cart });
   const { doc } = load("checkout.html", storage);
   const text = doc.getElementById("checkoutMain").textContent;
   ok("60-min windows in the label", text.indexOf("60-min windows") !== -1);
@@ -399,7 +399,7 @@ console.log("\nSTOREFRONT — the boxes page shows the store's own design");
     pickup: { location: null, locationLabel: "", storeId: "dunkin-342238", dateStr: null, slotHm: null },
     checkout: { mode: "guest", name: "", email: "", phone: "", consent: false },
   });
-  const { doc } = load("boxes.html", Object.assign({}, boxStorage, { glaze_order_v1: cart }));
+  const { doc } = load("boxes.html", Object.assign({}, boxStorage, { photodonuts_order_v1: cart }));
   const text = doc.getElementById("featuredGrid").textContent;
   ok("store design listed", text.indexOf("Homecoming") !== -1);
   ok("hidden chain box is gone", text.indexOf("Fourth of July") === -1);
@@ -415,7 +415,7 @@ console.log("\nDASHBOARD — user management");
 
   click(w, doc.querySelector("[data-new-user]"));
   setValue(w, doc.getElementById("uName"), "Sam Reed");
-  setValue(w, doc.getElementById("uEmail"), "sam@glaze.co");
+  setValue(w, doc.getElementById("uEmail"), "sam@photodonuts.co");
   setValue(w, doc.getElementById("uPass"), "secret123");
   setValue(w, doc.getElementById("uRole"), "cml", "change");
   eq("CML gets checkboxes for every store", doc.querySelectorAll("[data-user-store]").length, 4);
@@ -424,7 +424,7 @@ console.log("\nDASHBOARD — user management");
   setChecked(w, doc.querySelectorAll("[data-user-store]")[1], true);
   click(w, doc.querySelector("[data-user-save]"));
   eq("account created", doc.querySelectorAll("[data-edit-user]").length, 4);
-  const sam = w.Auth.listUsers().find((u) => u.email === "sam@glaze.co");
+  const sam = w.Auth.listUsers().find((u) => u.email === "sam@photodonuts.co");
   eq("saved with two stores", sam.storeIds.length, 2);
   eq("saved as CML", sam.role, "cml");
 

@@ -210,13 +210,13 @@ console.log("\nSETTINGS — persistence, reset and export/import");
 {
   const w = boot();
   w.Settings.setScheduling("dunkin-342238", { leadTimeMinutes: 120, slotIncrementMinutes: 30, slotCapacityDozen: 9 });
-  const raw = w.localStorage.getItem("glaze_store_settings_v1");
+  const raw = w.localStorage.getItem("photodonuts_store_settings_v1");
   ok("written to localStorage", !!raw && raw.indexOf("120") !== -1);
   const exported = w.Settings.exportJson();
 
   // reload from the same storage — the edit must survive
   const w2 = boot();
-  w2.localStorage.setItem("glaze_store_settings_v1", raw);
+  w2.localStorage.setItem("photodonuts_store_settings_v1", raw);
   w2.Settings.load();
   w2.Settings.apply();
   eq("survives a reload", w2.DB.STORES.find((s) => s.id === "dunkin-342238").scheduling.slotCapacityDozen, 9);
@@ -231,9 +231,47 @@ console.log("\nSETTINGS — persistence, reset and export/import");
   eq("resetAll clears everything", w3.Settings.isCustomized("dunkin-342238"), false);
 
   const w4 = boot();
-  w4.localStorage.setItem("glaze_store_settings_v1", "{ not json");
+  w4.localStorage.setItem("photodonuts_store_settings_v1", "{ not json");
   w4.Settings.load();
   ok("corrupt storage falls back to defaults instead of throwing", w4.DB.STORES.length === 4);
+}
+
+console.log("\nSETTINGS — settings saved before the Photo Donuts rename still load");
+{
+  // Produce a real pre-rename blob, then present it under the OLD key only.
+  const seed = boot();
+  seed.Settings.setScheduling("dunkin-342238", { leadTimeMinutes: 90, slotIncrementMinutes: 15, slotCapacityDozen: 7 });
+  seed.Settings.setMenu("dunkin-342238", { icingIds: ["vanilla"], sprinkleColorIds: ["red"] });
+  const blob = seed.localStorage.getItem("photodonuts_store_settings_v1");
+
+  const w = boot();
+  w.localStorage.removeItem("photodonuts_store_settings_v1");
+  w.localStorage.setItem("glaze_store_settings_v1", blob);
+  w.Settings.load();
+  w.Settings.apply();
+  const store = w.DB.STORES.find((s) => s.id === "dunkin-342238");
+  eq("pre-rename scheduling survived", store.scheduling.slotCapacityDozen, 7);
+  eq("pre-rename menu survived", store.menu.icingIds.join(), "vanilla");
+  eq("copied to the new key", !!w.localStorage.getItem("photodonuts_store_settings_v1"), true);
+  eq("old key cleaned up", w.localStorage.getItem("glaze_store_settings_v1"), null);
+
+  // and a newer blob must win over a stale legacy one
+  const w2 = boot();
+  w2.Settings.setScheduling("dunkin-342238", { leadTimeMinutes: 30, slotIncrementMinutes: 30, slotCapacityDozen: 42 });
+  w2.localStorage.setItem("glaze_store_settings_v1", blob);
+  w2.Settings.load();
+  w2.Settings.apply();
+  eq("current key wins over a stale legacy one",
+     w2.DB.STORES.find((s) => s.id === "dunkin-342238").scheduling.slotCapacityDozen, 42);
+}
+
+console.log("\nAUTH — demo accounts use the new domain");
+{
+  const w = boot();
+  ok("seeded emails are @photodonuts.co", w.Auth.SEED_USERS.every((u) => /@photodonuts\.co$/.test(u.email)),
+     w.Auth.SEED_USERS.map((u) => u.email).join(", "));
+  ok("they actually sign in", w.Auth.login("admin@photodonuts.co", "donut123").ok);
+  ok("no account remains on the old domain", !w.Auth.listUsers().some((u) => /@glaze\.co$/.test(u.email)));
 }
 
 console.log("\nSETTINGS — applying twice cannot compound");
@@ -248,13 +286,13 @@ console.log("\nSETTINGS — applying twice cannot compound");
 console.log("\nAUTH — roles, scope and capabilities");
 {
   const w = boot();
-  const bad = w.Auth.login("admin@glaze.co", "wrong");
+  const bad = w.Auth.login("admin@photodonuts.co", "wrong");
   ok("wrong password rejected", !bad.ok);
   ok("no session after a failed login", w.Auth.currentUser() === null);
 
-  const admin = w.Auth.login("admin@glaze.co", "donut123");
+  const admin = w.Auth.login("admin@photodonuts.co", "donut123");
   ok("admin signs in", admin.ok);
-  eq("session persists", w.Auth.currentUser().email, "admin@glaze.co");
+  eq("session persists", w.Auth.currentUser().email, "admin@photodonuts.co");
   eq("admin reaches every store", w.Auth.storeIdsFor(admin.user).length, 4);
   eq("admin can manage users", w.Auth.can(admin.user, "users"), true);
   eq("admin can edit pricing", w.Auth.can(admin.user, "pricing"), true);
@@ -282,33 +320,33 @@ console.log("\nAUTH — roles, scope and capabilities");
 console.log("\nAUTH — user management guards");
 {
   const w = boot();
-  w.Auth.login("admin@glaze.co", "donut123");
+  w.Auth.login("admin@photodonuts.co", "donut123");
 
   let r = w.Auth.saveUser({ isNew: true, name: "Test", email: "nope", role: "manager", storeIds: ["dunkin-342238"], password: "secret1" });
   ok("invalid email rejected", !r.ok, r.error);
-  r = w.Auth.saveUser({ isNew: true, name: "Test", email: "t@glaze.co", role: "manager", storeIds: [], password: "secret1" });
+  r = w.Auth.saveUser({ isNew: true, name: "Test", email: "t@photodonuts.co", role: "manager", storeIds: [], password: "secret1" });
   ok("manager with no store rejected", !r.ok, r.error);
-  r = w.Auth.saveUser({ isNew: true, name: "Test", email: "t@glaze.co", role: "manager", storeIds: ["dunkin-342238"], password: "abc" });
+  r = w.Auth.saveUser({ isNew: true, name: "Test", email: "t@photodonuts.co", role: "manager", storeIds: ["dunkin-342238"], password: "abc" });
   ok("short password rejected", !r.ok, r.error);
-  r = w.Auth.saveUser({ isNew: true, name: "Test", email: "admin@glaze.co", role: "manager", storeIds: ["dunkin-342238"], password: "secret1" });
+  r = w.Auth.saveUser({ isNew: true, name: "Test", email: "admin@photodonuts.co", role: "manager", storeIds: ["dunkin-342238"], password: "secret1" });
   ok("duplicate email rejected", !r.ok, r.error);
 
-  r = w.Auth.saveUser({ isNew: true, name: "Test", email: "t@glaze.co", role: "manager", storeIds: ["dunkin-342238", "dunkin-346976"], password: "secret1" });
+  r = w.Auth.saveUser({ isNew: true, name: "Test", email: "t@photodonuts.co", role: "manager", storeIds: ["dunkin-342238", "dunkin-346976"], password: "secret1" });
   ok("valid manager created", r.ok, r.error);
-  const created = w.Auth.listUsers().find((u) => u.email === "t@glaze.co");
+  const created = w.Auth.listUsers().find((u) => u.email === "t@photodonuts.co");
   eq("manager trimmed to a single store", created.storeIds.length, 1);
-  ok("new user can sign in", w.Auth.login("t@glaze.co", "secret1").ok);
+  ok("new user can sign in", w.Auth.login("t@photodonuts.co", "secret1").ok);
 
-  w.Auth.login("admin@glaze.co", "donut123");
+  w.Auth.login("admin@photodonuts.co", "donut123");
   const adminId = w.Auth.listUsers().find((u) => u.role === "admin").id;
-  r = w.Auth.saveUser({ id: adminId, name: "Avery Cole", email: "admin@glaze.co", role: "manager", storeIds: ["dunkin-342238"] });
+  r = w.Auth.saveUser({ id: adminId, name: "Avery Cole", email: "admin@photodonuts.co", role: "manager", storeIds: ["dunkin-342238"] });
   ok("the only admin cannot be demoted", !r.ok, r.error);
   r = w.Auth.deleteUser(adminId);
   ok("cannot delete the account you're signed in with", !r.ok, r.error);
 
-  r = w.Auth.saveUser({ isNew: true, name: "Second", email: "admin2@glaze.co", role: "admin", storeIds: [], password: "secret1" });
+  r = w.Auth.saveUser({ isNew: true, name: "Second", email: "admin2@photodonuts.co", role: "admin", storeIds: [], password: "secret1" });
   ok("second admin created", r.ok, r.error);
-  const second = w.Auth.listUsers().find((u) => u.email === "admin2@glaze.co");
+  const second = w.Auth.listUsers().find((u) => u.email === "admin2@photodonuts.co");
   ok("with two admins one can be deleted", w.Auth.deleteUser(second.id).ok);
 
   // CML assigned to a store that no longer exists
@@ -319,7 +357,7 @@ console.log("\nAUTH — user management guards");
 console.log("\nAUTH — passwords are not stored in the clear");
 {
   const w = boot();
-  const raw = w.localStorage.getItem("glaze_users_v1");
+  const raw = w.localStorage.getItem("photodonuts_users_v1");
   ok("seed password absent from storage", raw.indexOf("donut123") === -1);
 }
 

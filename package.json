@@ -1,8 +1,8 @@
 {
-  "name": "glaze-donut-builder",
+  "name": "photo-donuts",
   "version": "1.0.0",
   "private": true,
-  "description": "Glaze & Co. donut builder + staff dashboard. The site itself needs no build step — this file exists only so the test suite can pull in jsdom.",
+  "description": "Photo Donuts donut builder + staff dashboard. The site itself needs no build step — this file exists only so the test suite can pull in jsdom.",
   "scripts": {
     "test": "node tests/settings-auth.test.js && node tests/dashboard-dom.test.js && npm run test:browser",
     "test:data": "node tests/settings-auth.test.js",

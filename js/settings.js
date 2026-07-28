@@ -27,7 +27,8 @@
 (function () {
   "use strict";
 
-  const LS_KEY = "glaze_store_settings_v1";
+  const LS_KEY = "photodonuts_store_settings_v1";
+  const LEGACY_LS_KEY = "glaze_store_settings_v1"; // pre-rename; see load()
   const VERSION = 1;
 
   /* Pristine snapshot of what config.js shipped, taken before anything is
@@ -50,7 +51,17 @@
 
   function load() {
     try {
-      const raw = localStorage.getItem(LS_KEY);
+      // Carry settings across the Glaze & Co. → Photo Donuts rename rather
+      // than silently dropping whatever staff had already configured.
+      let raw = localStorage.getItem(LS_KEY);
+      if (raw == null) {
+        const legacy = localStorage.getItem(LEGACY_LS_KEY);
+        if (legacy != null) {
+          localStorage.setItem(LS_KEY, legacy);
+          localStorage.removeItem(LEGACY_LS_KEY);
+          raw = legacy;
+        }
+      }
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object") return;
@@ -243,7 +254,7 @@
   function importJson(text) {
     const parsed = JSON.parse(text); // caller catches
     if (!parsed || parsed.version !== VERSION || typeof parsed.stores !== "object") {
-      throw new Error("Not a Glaze & Co. settings file (version " + VERSION + ").");
+      throw new Error("Not a Photo Donuts settings file (version " + VERSION + ").");
     }
     overrides = { version: VERSION, stores: parsed.stores, updatedAt: parsed.updatedAt || null };
     save();

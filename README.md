@@ -1,4 +1,4 @@
-# Glaze & Co. — Donut Builder
+# Photo Donuts — Donut Builder
 
 A premium, conversion-focused donut **customization + in-store pickup** ordering
 experience. Customers design one donut that applies to a dozen, preview it live

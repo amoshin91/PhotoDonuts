@@ -1,5 +1,5 @@
 /* =============================================================================
-   app.js — State + UI wiring for the Glaze & Co. donut builder.
+   app.js — State + UI wiring for the Photo Donuts donut builder.
    Depends on: config.js (DB), menu.js (Menu), donut-svg.js (DonutSVG),
                pricing.js (Pricing), pickup.js (Pickup).
 
@@ -51,7 +51,8 @@
   /* --------------------- PERSISTENCE (localStorage) ---------------------- */
   /* Cart + pickup + checkout survive navigation to the separate checkout page
      (and a page refresh). The in-progress builder design is NOT persisted. */
-  const LS_KEY = "glaze_order_v1";
+  const LS_KEY = "photodonuts_order_v1";
+  const LEGACY_LS_KEY = "glaze_order_v1"; // pre-rename; migrated in loadPersisted()
   function persist() {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify({
@@ -61,7 +62,16 @@
   }
   function loadPersisted() {
     try {
-      const raw = localStorage.getItem(LS_KEY);
+      // Don't empty someone's cart just because the brand name changed.
+      let raw = localStorage.getItem(LS_KEY);
+      if (raw == null) {
+        const legacy = localStorage.getItem(LEGACY_LS_KEY);
+        if (legacy != null) {
+          localStorage.setItem(LS_KEY, legacy);
+          localStorage.removeItem(LEGACY_LS_KEY);
+          raw = legacy;
+        }
+      }
       if (!raw) return;
       const d = JSON.parse(raw);
       if (Array.isArray(d.boxes)) state.cart.boxes = d.boxes;
@@ -1598,7 +1608,7 @@
     const store = DB.STORES.find((s) => s.id === state.pickup.storeId);
     const totals = Pricing.priceCart(expandedBoxes(), state.pickup.storeId);
     state.placed = {
-      orderId: "GC-" + Math.random().toString(36).slice(2, 7).toUpperCase(),
+      orderId: "PD-" + Math.random().toString(36).slice(2, 7).toUpperCase(),
       store,
       when: Pickup.formatPickupWhen(store, state.pickup.dateStr, state.pickup.slotHm),
       totals,
@@ -1843,7 +1853,7 @@
     if (!el) return;
     el.innerHTML = DB.STORES.map((s) => `
       <div class="footer-store">
-        <div class="footer-store__name">${s.name.replace("Glaze & Co. — ", "")}</div>
+        <div class="footer-store__name">${s.name.replace("Photo Donuts — ", "")}</div>
         <div class="footer-store__addr">${s.address}</div>
         <div class="footer-store__addr">${s.phone}</div>
       </div>`).join("");

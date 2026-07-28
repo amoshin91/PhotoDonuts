@@ -1,5 +1,5 @@
 /* =============================================================================
-   Glaze & Co. — Donut Builder
+   Photo Donuts — Donut Builder
    Design system + components. Mobile-first, WCAG-AA minded.
    ============================================================================ */
 
@@ -138,7 +138,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.
 .brand { display: inline-flex; align-items: center; gap: 0.55rem; text-decoration: none; font-family: var(--font-display); }
 .brand__mark { display: grid; place-items: center; }
 .brand__name { font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; }
-.brand__amp { color: var(--berry); margin: 0 0.06em; }
+.brand__accent { color: var(--berry); }
 .site-nav { display: none; margin-left: 1.5rem; gap: 1.4rem; }
 .site-nav a { text-decoration: none; color: var(--ink-soft); font-weight: 500; font-size: 0.95rem; transition: color var(--t); }
 .site-nav a:hover { color: var(--ink); }

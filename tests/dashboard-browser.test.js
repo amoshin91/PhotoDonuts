@@ -31,7 +31,7 @@ const ok=(n,c,x)=>{ c?(pass++,console.log("  ✓ "+n)):(fail++,console.log("  �
   // torn down mid-call and hangs); the login FORM is covered by the jsdom
   // suite, and what this file exists to exercise is the dashboard itself.
   await p.goto(BASE + "/login.html", { waitUntil: "domcontentloaded" });
-  const signedIn = await p.evaluate(() => Auth.login("admin@glaze.co", "donut123").ok);
+  const signedIn = await p.evaluate(() => Auth.login("admin@photodonuts.co", "donut123").ok);
   if (!signedIn) { console.log("  ✗ could not sign in"); process.exit(1); }
   await p.goto(BASE + "/dashboard.html", { waitUntil: "domcontentloaded" });
   await p.waitForSelector(".dash-nav__item", { timeout: 15000 });
