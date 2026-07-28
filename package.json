@@ -4,12 +4,14 @@
   "private": true,
   "description": "Glaze & Co. donut builder + staff dashboard. The site itself needs no build step — this file exists only so the test suite can pull in jsdom.",
   "scripts": {
-    "test": "node tests/settings-auth.test.js && node tests/dashboard-dom.test.js",
+    "test": "node tests/settings-auth.test.js && node tests/dashboard-dom.test.js && npm run test:browser",
     "test:data": "node tests/settings-auth.test.js",
     "test:dom": "node tests/dashboard-dom.test.js",
+    "test:browser": "node tests/serve-and-run.js tests/dashboard-browser.test.js",
     "serve": "python3 -m http.server 8000"
   },
   "devDependencies": {
-    "jsdom": "^27.0.0"
+    "jsdom": "^27.0.0",
+    "puppeteer": "^24.0.0"
   }
 }

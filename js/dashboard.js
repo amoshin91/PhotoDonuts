@@ -72,12 +72,64 @@
     document.body.classList.toggle("has-save-bar", state.dirty);
   }
 
-  /* Guard every navigation that would throw away edits. */
-  function confirmLeave() {
-    if (!state.dirty) return true;
-    const ok = window.confirm("You have unsaved changes on this page. Discard them?");
-    if (ok) { state.dirty = false; syncSaveBar(); }
-    return ok;
+  /* Guard every navigation that would throw away edits, then run `proceed`.
+
+     Deliberately NOT window.confirm: browsers offer "prevent this page from
+     creating additional dialogs", and once a visitor ticks that, confirm()
+     returns false forever — which silently turned every nav click into a
+     no-op with no way to recover short of a reload. An in-page dialog can't
+     be suppressed. Async by nature, hence the callback. */
+  function confirmLeave(proceed, onCancel) {
+    if (!state.dirty) { proceed(); return; }
+    showDialog({
+      title: "Discard unsaved changes?",
+      body: "You've changed settings here but haven't saved them yet.",
+      confirmLabel: "Discard changes",
+      cancelLabel: "Keep editing",
+      onConfirm: () => { state.dirty = false; syncSaveBar(); proceed(); },
+      onCancel: onCancel,
+    });
+  }
+
+  /* Small modal built on the .dlg-* components already in css/styles.css. */
+  function showDialog(opts) {
+    const prevFocus = document.activeElement;
+    const wrap = document.createElement("div");
+    wrap.className = "dlg-overlay";
+    wrap.innerHTML = `
+      <div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dashDlgTitle" aria-describedby="dashDlgBody">
+        <h2 class="dlg__title" id="dashDlgTitle">${escapeHtml(opts.title)}</h2>
+        <div class="dlg__body" id="dashDlgBody"><p>${escapeHtml(opts.body)}</p></div>
+        <div class="dlg__actions">
+          <button class="btn btn--ghost" type="button" data-act="cancel">${escapeHtml(opts.cancelLabel || "Cancel")}</button>
+          <button class="btn btn--primary" type="button" data-act="ok">${escapeHtml(opts.confirmLabel || "Confirm")}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+
+    const close = (confirmed) => {
+      document.removeEventListener("keydown", onKey, true);
+      wrap.remove();
+      if (prevFocus && prevFocus.focus) prevFocus.focus();
+      if (confirmed) opts.onConfirm();
+      else if (opts.onCancel) opts.onCancel();
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); close(false); }
+      if (e.key === "Tab") { // keep focus inside the dialog
+        const f = $$("button", wrap);
+        const i = f.indexOf(document.activeElement);
+        e.preventDefault();
+        f[(i + (e.shiftKey ? f.length - 1 : 1)) % f.length].focus();
+      }
+    };
+    wrap.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-act]");
+      if (btn) close(btn.dataset.act === "ok");
+      else if (e.target === wrap) close(false);
+    });
+    document.addEventListener("keydown", onKey, true);
+    $('[data-act="ok"]', wrap).focus();
   }
 
   /* Turn a design (partial or complete) into what DonutSVG expects.
@@ -504,21 +556,6 @@
 
     render(store) {
       const d = state.draft;
-      const leadTotal = d.leadHours * 60 + d.leadMinutes;
-      const defaults = Settings.defaults().scheduling;
-
-      // Preview against a store carrying the DRAFT rules, so staff see the
-      // effect of a change before committing it.
-      const probe = Object.assign(clone(store), {
-        scheduling: {
-          leadTimeMinutes: leadTotal,
-          slotIncrementMinutes: d.slotIncrementMinutes,
-          slotCapacityDozen: d.slotCapacityDozen,
-        },
-        active: true, // preview the schedule even while ordering is paused
-      });
-      const previewHtml = renderSlotPreview(probe);
-
       const increments = [10, 15, 20, 30, 45, 60, 90, 120];
 
       return `
@@ -530,16 +567,15 @@
           <div class="dur-row">
             <div class="field field--inline">
               <label class="field-label" for="leadHours">Hours</label>
-              <input class="input input--num" id="leadHours" type="number" min="0" max="336" step="1" value="${d.leadHours}" />
+              <input class="input input--num" id="leadHours" type="text" inputmode="numeric" autocomplete="off" aria-describedby="leadRead" value="${d.leadHours}" />
             </div>
             <div class="field field--inline">
               <label class="field-label" for="leadMinutes">Minutes</label>
-              <input class="input input--num" id="leadMinutes" type="number" min="0" max="59" step="5" value="${d.leadMinutes}" />
+              <input class="input input--num" id="leadMinutes" type="text" inputmode="numeric" autocomplete="off" aria-describedby="leadRead" value="${d.leadMinutes}" />
             </div>
-            <p class="dur-row__read">= <strong>${escapeHtml(Pickup.formatDuration(leadTotal))}</strong> minimum notice
-              ${leadTotal === defaults.leadTimeMinutes ? `<span class="dim">(default)</span>` : ""}</p>
+            <p class="dur-row__read" id="leadRead" aria-live="polite">${leadReadHtml(d)}</p>
           </div>
-          ${leadTotal >= 1440 ? `<p class="notice" style="margin-top:.8rem">That's ${Math.floor(leadTotal / 1440)} day${leadTotal >= 2880 ? "s" : ""} of notice — customers won't see any same-day times.</p>` : ""}
+          <div id="leadNotice">${leadNoticeHtml(d)}</div>
         </section>
 
         <section class="card">
@@ -555,39 +591,52 @@
           <p class="card__sub">The most this store can produce for any single pickup window. An order is only offered a window with room for <em>all</em> of its dozens, so a 6-dozen order needs 6 free.</p>
           <div class="field field--inline">
             <label class="field-label" for="capacity">Dozens per window</label>
-            <input class="input input--num" id="capacity" type="number" min="1" max="500" step="1" value="${d.slotCapacityDozen}" />
+            <input class="input input--num" id="capacity" type="text" inputmode="numeric" autocomplete="off" value="${d.slotCapacityDozen}" />
           </div>
-          <p class="field-note">At ${d.slotIncrementMinutes}-minute windows that's up to
-            <strong>${d.slotCapacityDozen * Math.floor(60 / Math.max(1, d.slotIncrementMinutes)) || d.slotCapacityDozen}</strong>
-            dozen per hour at full booking.</p>
+          <p class="field-note" id="capacityNote">${capacityNoteHtml(d)}</p>
         </section>
 
         <section class="card card--quiet">
           <h3 class="card__title">Preview — next available pickups</h3>
           <p class="card__sub">Generated with the settings above, in ${escapeHtml(store.timezone)}. Remaining counts are placeholder booking data until the orders database exists.</p>
-          ${previewHtml}
+          <div id="windowsPreview">${renderSlotPreview(windowsProbe(store, d))}</div>
         </section>`;
     },
 
     on: {
       input(e) {
-        const d = state.draft;
         const id = e.target.id;
-        if (id !== "leadHours" && id !== "leadMinutes" && id !== "capacity") return;
-        // Let the field go empty while typing — clamping mid-keystroke would
-        // rewrite "" to "0" and fight the person entering a two-digit number.
-        if (e.target.value === "") return;
-        if (id === "leadHours") d.leadHours = clampNum(e.target.value, 0, 336);
-        else if (id === "leadMinutes") d.leadMinutes = clampNum(e.target.value, 0, 59);
-        else d.slotCapacityDozen = clampNum(e.target.value, 1, 500);
-        rerenderSection({ keepFocus: id });
+        if (!WINDOW_FIELDS[id]) return;
+        // Parse only — never clamp or rewrite the field mid-keystroke, and
+        // never repaint the inputs. Only the derived readouts refresh.
+        state.draft[WINDOW_FIELDS[id]] = Math.max(0, looseInt(e.target.value, 0));
+        refreshWindowsDerived();
+        markDirty();
+      },
+      // Blur / Enter: the value is final, so normalise it into range and show
+      // the result in that one field. Still no section repaint.
+      change(e) {
+        const field = WINDOW_FIELDS[e.target.id];
+        if (!field) return;
+        const d = state.draft;
+        const before = leadTotal(d) + ":" + d.slotCapacityDozen + ":" + d.slotIncrementMinutes;
+        d.leadHours = clampNum(d.leadHours, 0, 336);
+        d.leadMinutes = clampNum(d.leadMinutes, 0, 59);
+        d.slotCapacityDozen = clampNum(d.slotCapacityDozen, 1, 500);
+        e.target.value = d[field];
+        // The input handler already refreshed these; only redo it if clamping
+        // actually changed something, so the page doesn't reflow under the
+        // cursor of someone clicking straight into the next field.
+        if (leadTotal(d) + ":" + d.slotCapacityDozen + ":" + d.slotIncrementMinutes !== before) {
+          refreshWindowsDerived();
+        }
         markDirty();
       },
       click(e) {
         const btn = e.target.closest("[data-increment]");
         if (!btn) return;
         state.draft.slotIncrementMinutes = Number(btn.dataset.increment);
-        rerenderSection();
+        rerenderSection(); // no field is being edited, so a full repaint is safe
         markDirty();
       },
     },
@@ -603,10 +652,71 @@
     },
   };
 
+  const WINDOW_FIELDS = { leadHours: "leadHours", leadMinutes: "leadMinutes", capacity: "slotCapacityDozen" };
+
+  /* ---- pickup-window derived output -------------------------------------
+     Kept separate from render() so typing can refresh the readouts WITHOUT
+     repainting the inputs. Repainting a field someone is typing in fights
+     them for the caret and eats characters. */
+  function leadTotal(d) { return d.leadHours * 60 + d.leadMinutes; }
+
+  function leadReadHtml(d) {
+    const total = leadTotal(d);
+    const isDefault = total === Settings.defaults().scheduling.leadTimeMinutes;
+    return `= <strong>${escapeHtml(Pickup.formatDuration(total))}</strong> minimum notice`
+      + (isDefault ? ` <span class="dim">(default)</span>` : "");
+  }
+
+  function leadNoticeHtml(d) {
+    const total = leadTotal(d);
+    if (total < 1440) return "";
+    return `<p class="notice" style="margin-top:.8rem">That's ${Math.floor(total / 1440)} day${total >= 2880 ? "s" : ""} of notice — customers won't see any same-day times.</p>`;
+  }
+
+  function capacityNoteHtml(d) {
+    const perHour = d.slotCapacityDozen * Math.floor(60 / Math.max(1, d.slotIncrementMinutes)) || d.slotCapacityDozen;
+    return `At ${d.slotIncrementMinutes}-minute windows that's up to <strong>${perHour}</strong> dozen per hour at full booking.`;
+  }
+
+  // A copy of the store carrying the DRAFT rules, so the preview shows the
+  // effect of a change before it's committed.
+  function windowsProbe(store, d) {
+    return Object.assign(clone(store), {
+      scheduling: {
+        leadTimeMinutes: leadTotal(d),
+        slotIncrementMinutes: d.slotIncrementMinutes,
+        slotCapacityDozen: d.slotCapacityDozen,
+      },
+      active: true, // preview the schedule even while ordering is paused
+    });
+  }
+
+  function refreshWindowsDerived() {
+    const d = state.draft;
+    const store = currentStore();
+    if (!d || !store) return;
+    const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+    set("leadRead", leadReadHtml(d));
+    set("leadNotice", leadNoticeHtml(d));
+    set("capacityNote", capacityNoteHtml(d));
+    set("windowsPreview", renderSlotPreview(windowsProbe(store, d)));
+  }
+
   function clampNum(v, min, max) {
     const n = Math.round(Number(v));
     if (!isFinite(n)) return min;
     return Math.min(max, Math.max(min, n));
+  }
+
+  // Lenient parse for a field still being typed into: "" and "-" read as the
+  // fallback rather than snapping the field to a bound.
+  function looseInt(v, fallback) {
+    const n = parseInt(v, 10);
+    return isFinite(n) ? n : fallback;
+  }
+  function looseMoney(v) {
+    const n = parseFloat(v);
+    return isFinite(n) && n >= 0 ? n : 0;
   }
 
   /* Next few bookable windows, scanning forward past closed/blacked-out days. */
@@ -656,11 +766,6 @@
       const d = state.draft;
       const base = Settings.defaults().pricing;
 
-      // A representative dozen, priced with the draft, so a change is legible
-      // in dollars rather than in fields.
-      const example = fullDesign({ typeId: "classic-shell", fillingId: "jelly", icingId: "chocolate", noSprinkles: false, sprinkleColorIds: ["red", "yellow", "blue"] });
-      const exLines = examplePrice(example, d);
-
       const modRows = (table, items, labelKey) => items.map((it) => {
         const val = d[table][it.id];
         const def = (base[table] || {})[it.id] || 0;
@@ -669,7 +774,7 @@
             <label class="price-row__label" for="p-${table}-${it.id}">${escapeHtml(it[labelKey])}</label>
             <div class="money-input">
               <span class="money-input__sym">+$</span>
-              <input class="input input--num" id="p-${table}-${it.id}" type="number" min="0" step="0.25" value="${val}" data-price-table="${table}" data-price-id="${it.id}" />
+              <input class="input input--num" id="p-${table}-${it.id}" type="text" inputmode="decimal" autocomplete="off" value="${val}" data-price-table="${table}" data-price-id="${it.id}" />
             </div>
             ${val !== def ? `<button class="link-btn price-row__reset" type="button" data-price-reset="${table}:${it.id}">reset to ${money(def)}</button>` : `<span class="price-row__def dim">default</span>`}
           </div>`;
@@ -684,25 +789,25 @@
             <div class="price-row">
               <label class="price-row__label" for="p-baseDozen">Base dozen</label>
               <div class="money-input"><span class="money-input__sym">$</span>
-                <input class="input input--num" id="p-baseDozen" type="number" min="0" step="0.25" value="${d.baseDozen}" data-price-key="baseDozen" /></div>
+                <input class="input input--num" id="p-baseDozen" type="text" inputmode="decimal" autocomplete="off" value="${d.baseDozen}" data-price-key="baseDozen" /></div>
               ${d.baseDozen !== base.baseDozen ? `<button class="link-btn price-row__reset" type="button" data-price-reset="baseDozen">reset to ${money(base.baseDozen)}</button>` : `<span class="price-row__def dim">default</span>`}
             </div>
             <div class="price-row">
               <label class="price-row__label" for="p-additionalSprinkleColor">Each extra sprinkle color <span class="dim">(first is free)</span></label>
               <div class="money-input"><span class="money-input__sym">$</span>
-                <input class="input input--num" id="p-additionalSprinkleColor" type="number" min="0" step="0.25" value="${d.additionalSprinkleColor}" data-price-key="additionalSprinkleColor" /></div>
+                <input class="input input--num" id="p-additionalSprinkleColor" type="text" inputmode="decimal" autocomplete="off" value="${d.additionalSprinkleColor}" data-price-key="additionalSprinkleColor" /></div>
               ${d.additionalSprinkleColor !== base.additionalSprinkleColor ? `<button class="link-btn price-row__reset" type="button" data-price-reset="additionalSprinkleColor">reset to ${money(base.additionalSprinkleColor)}</button>` : `<span class="price-row__def dim">default</span>`}
             </div>
             <div class="price-row">
               <label class="price-row__label" for="p-drizzleCost">Drizzle <span class="dim">(0 = free)</span></label>
               <div class="money-input"><span class="money-input__sym">$</span>
-                <input class="input input--num" id="p-drizzleCost" type="number" min="0" step="0.25" value="${d.drizzleCost}" data-price-key="drizzleCost" /></div>
+                <input class="input input--num" id="p-drizzleCost" type="text" inputmode="decimal" autocomplete="off" value="${d.drizzleCost}" data-price-key="drizzleCost" /></div>
               ${d.drizzleCost !== base.drizzleCost ? `<button class="link-btn price-row__reset" type="button" data-price-reset="drizzleCost">reset to ${money(base.drizzleCost)}</button>` : `<span class="price-row__def dim">default</span>`}
             </div>
             <div class="price-row">
               <label class="price-row__label" for="p-taxRate">Sales tax</label>
               <div class="money-input">
-                <input class="input input--num" id="p-taxRate" type="number" min="0" max="25" step="0.01" value="${round2(d.taxRate * 100)}" data-price-pct="taxRate" />
+                <input class="input input--num" id="p-taxRate" type="text" inputmode="decimal" autocomplete="off" value="${round2(d.taxRate * 100)}" data-price-pct="taxRate" />
                 <span class="money-input__sym">%</span>
               </div>
               ${d.taxRate !== base.taxRate ? `<button class="link-btn price-row__reset" type="button" data-price-reset="taxRate">reset to ${round2(base.taxRate * 100)}%</button>` : `<span class="price-row__def dim">default</span>`}
@@ -729,29 +834,42 @@
         <section class="card card--quiet">
           <h3 class="card__title">Example dozen</h3>
           <p class="card__sub">Classic Shell · jelly filling · chocolate icing · 3 sprinkle colors.</p>
-          <div class="breakdown breakdown--dash">
-            ${exLines.lines.map((l) => `<div class="breakdown__row"><span>${escapeHtml(l.label)}</span><span>${money(l.amount)}</span></div>`).join("")}
-            <div class="breakdown__row breakdown__row--total"><span>Box subtotal (12)</span><span>${money(exLines.subtotal)}</span></div>
-            <div class="breakdown__row"><span>Tax (${round2(d.taxRate * 100)}%)</span><span>${money(exLines.subtotal * d.taxRate)}</span></div>
-            <div class="breakdown__row breakdown__row--total"><span>Customer pays</span><span>${money(exLines.subtotal * (1 + d.taxRate))}</span></div>
-          </div>
+          <div class="breakdown breakdown--dash" id="pricingExample">${pricingExampleHtml(d)}</div>
         </section>`;
     },
 
     on: {
       input(e) {
         const d = state.draft;
-        if (e.target.value === "") return; // mid-edit empty field; wait for a value
-        const key = e.target.dataset.priceKey;
-        if (key) { d[key] = Math.max(0, Number(e.target.value) || 0); rerenderSection({ keepFocus: e.target.id }); markDirty(); return; }
-        const pct = e.target.dataset.pricePct;
-        if (pct) { d[pct] = Math.max(0, (Number(e.target.value) || 0) / 100); rerenderSection({ keepFocus: e.target.id }); markDirty(); return; }
-        const table = e.target.dataset.priceTable;
-        if (table) {
-          d[table][e.target.dataset.priceId] = Math.max(0, Number(e.target.value) || 0);
-          rerenderSection({ keepFocus: e.target.id });
-          markDirty();
-        }
+        const el = e.target;
+        const key = el.dataset.priceKey, pct = el.dataset.pricePct, table = el.dataset.priceTable;
+        if (!key && !pct && !table) return;
+
+        // Parse without reformatting the field, and refresh only the example
+        // breakdown. Rewriting the field from the parsed number made decimals
+        // impossible to type: "23." parses to 23, which overwrote the field
+        // and swallowed the point.
+        const raw = el.value;
+        if (key) d[key] = looseMoney(raw);
+        else if (pct) d[pct] = looseMoney(raw) / 100;
+        else d[table][el.dataset.priceId] = looseMoney(raw);
+
+        const ex = document.getElementById("pricingExample");
+        if (ex) ex.innerHTML = pricingExampleHtml(d);
+        markDirty();
+      },
+      // Blur / Enter — show the parsed number in that one field. The row's
+      // "reset to $X" link is refreshed on the next full repaint (saving, or
+      // re-entering the section), which is soon enough for a hint.
+      change(e) {
+        const el = e.target;
+        const key = el.dataset.priceKey, pct = el.dataset.pricePct, table = el.dataset.priceTable;
+        if (!key && !pct && !table) return;
+        const d = state.draft;
+        if (key) el.value = d[key];
+        else if (pct) el.value = round2(d[pct] * 100);
+        else el.value = d[table][el.dataset.priceId];
+        markDirty();
       },
       click(e) {
         const btn = e.target.closest("[data-price-reset]");
@@ -776,6 +894,17 @@
   };
 
   function round2(n) { return Math.round(n * 100) / 100; }
+
+  /* Example-dozen breakdown — split out so typing a price can refresh it
+     without repainting (and fighting) the field being typed in. */
+  function pricingExampleHtml(d) {
+    const example = fullDesign({ typeId: "classic-shell", fillingId: "jelly", icingId: "chocolate", noSprinkles: false, sprinkleColorIds: ["red", "yellow", "blue"] });
+    const ex = examplePrice(example, d);
+    return ex.lines.map((l) => `<div class="breakdown__row"><span>${escapeHtml(l.label)}</span><span>${money(l.amount)}</span></div>`).join("")
+      + `<div class="breakdown__row breakdown__row--total"><span>Box subtotal (12)</span><span>${money(ex.subtotal)}</span></div>`
+      + `<div class="breakdown__row"><span>Tax (${round2(d.taxRate * 100)}%)</span><span>${money(ex.subtotal * d.taxRate)}</span></div>`
+      + `<div class="breakdown__row breakdown__row--total"><span>Customer pays</span><span>${money(ex.subtotal * (1 + d.taxRate))}</span></div>`;
+  }
 
   /* Price one design against a draft price table (not yet saved anywhere). */
   function examplePrice(design, P) {
@@ -1498,9 +1627,10 @@
       </div>
       <button class="link-btn" type="button" id="signOut">Sign out</button>`;
     $("#signOut").addEventListener("click", () => {
-      if (!confirmLeave()) return;
-      Auth.logout();
-      location.href = "login.html";
+      confirmLeave(() => {
+        Auth.logout();
+        location.href = "login.html";
+      });
     });
   }
 
@@ -1529,9 +1659,11 @@
       </select>
       <p class="dash-side__note">${stores.length} stores in your group.</p>`;
     $("#storeSelect").addEventListener("change", (e) => {
-      if (!confirmLeave()) { e.target.value = state.storeId; return; }
-      state.storeId = e.target.value;
-      render();
+      const picked = e.target.value;
+      confirmLeave(
+        () => { state.storeId = picked; render(); },
+        () => { e.target.value = state.storeId; } // put the dropdown back
+      );
     });
   }
 
@@ -1580,11 +1712,18 @@
     }
   }
 
-  /* Re-render only the section body, keeping the draft as-is. */
+  /* Re-render only the section body, keeping the draft as-is.
+
+     opts.keepValue is what the person has literally typed. Re-rendering a
+     field mid-edit from the parsed draft is destructive: typing "8" into a
+     capacity of 20 momentarily reads 820, which clamped to 500 and then
+     REPLACED what they were typing. The field being edited is therefore
+     restored verbatim, caret and all, and only normalised on blur. */
   function rerenderSection(opts) {
     const active = document.activeElement;
     const focusId = (opts && opts.keepFocus) || (active && active.id) || null;
-    const caret = caretOf(active);
+    const caret = opts && opts.keepCaret != null ? opts.keepCaret : caretOf(active);
+    const keepValue = opts ? opts.keepValue : null;
 
     paintSection();
 
@@ -1592,6 +1731,7 @@
       const next = document.getElementById(focusId);
       if (next && next.focus) {
         next.focus();
+        if (keepValue != null && next.value !== keepValue) next.value = keepValue;
         // Text inputs lose the caret when innerHTML is replaced; put it back.
         if (caret != null && typeof next.setSelectionRange === "function" && SELECTABLE[next.type]) {
           try { next.setSelectionRange(caret, caret); } catch (e) {}
@@ -1603,6 +1743,16 @@
   function paintSection() {
     $("#dashContent").innerHTML = activeSection().render(currentStore());
   }
+
+  /* NOTE ON REPAINTS AND TEXT FIELDS
+     Never call rerenderSection() from an input/change handler on a text field.
+     Repainting mid-edit fights the person typing (it rewrites the value and
+     resets the caret), and repainting on blur is worse still: `change` fires
+     BEFORE focus lands on whatever was clicked next, so the repaint rips that
+     element out of the DOM and drags focus backwards — everything typed into
+     the second field vanished. Sections with text fields therefore refresh
+     only their derived output (refreshWindowsDerived, #pricingExample) and
+     leave the inputs alone. Full repaints are fine from button clicks. */
 
   /* One delegated listener per event type on the container, forwarding to
      whichever section is active. Sections therefore never attach (or need to
@@ -1650,9 +1800,8 @@
     $("#dashNav").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-section]");
       if (!btn || btn.dataset.section === state.sectionId) return;
-      if (!confirmLeave()) return;
-      state.sectionId = btn.dataset.section;
-      render();
+      const next = btn.dataset.section;
+      confirmLeave(() => { state.sectionId = next; render(); });
     });
 
     $("#saveBtn").addEventListener("click", doSave);

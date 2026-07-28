@@ -154,14 +154,23 @@ The site still needs no build step; the suites are plain node.
 
 ```bash
 node tests/settings-auth.test.js   # data layer — no dependencies
-npm install && npm test            # adds the jsdom UI suite
+npm install && npm test            # adds the jsdom + real-browser suites
 ```
 
-`settings-auth.test.js` covers the override merge, per-store pricing and
-scheduling, pause, premades, persistence/reset/import, and the auth roles.
-`dashboard-dom.test.js` loads the real pages in jsdom, signs in as each role,
-walks every dashboard section, and asserts that a saved edit shows up on the
-storefront.
+| Suite | Needs | Covers |
+|-------|-------|--------|
+| `settings-auth.test.js` | nothing | override merge, per-store pricing & scheduling, pause, premades, persistence/reset/import, auth roles |
+| `dashboard-dom.test.js` | jsdom | loads the real pages, signs in as each role, walks every section, asserts saved edits reach the storefront |
+| `dashboard-browser.test.js` | puppeteer | **real Chromium** — typing, focus/blur, clamping, the unsaved-changes dialog, section navigation |
+
+**The browser suite is not optional belt-and-braces.** jsdom diverges from real
+browsers on `input.selectionStart` (jsdom returns `null`, browsers *throw* on
+non-text inputs), on focus/blur ordering, and on layout — and each of those
+gaps hid a bug that passed jsdom and broke in Chrome. Anything touching text
+input, focus or caret behaviour must be verified in `dashboard-browser.test.js`.
+
+`npm run test:browser` starts its own static server on port 8765 and shuts it
+down afterwards, so nothing is left listening.
 
 ## Google Maps
 

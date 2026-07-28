@@ -245,7 +245,32 @@ storefront reads the merged result everywhere it used to read config.js.
       no dependencies) covers the merge, per-store pricing/scheduling, pause,
       premades, persistence, reset/import and the roles; `dashboard-dom.test.js`
       (92 checks, jsdom) signs in as each role, walks every section, drives real
-      clicks, and asserts saved edits reach the storefront. `npm test` runs both.
+      clicks, and asserts saved edits reach the storefront;
+      `dashboard-browser.test.js` (29 checks, real Chromium) covers typing,
+      focus/blur, clamping and navigation. `npm test` runs all three.
+
+### Dashboard form fixes (2026-07-28, post-release)
+Three bugs shipped in the dashboard because the jsdom suite passed on broken
+code. All were found by driving a real browser; the browser suite now exists so
+they can't recur.
+
+- [x] Reading `input.selectionStart` for caret preservation threw
+      InvalidStateError on any input type that doesn't support selection
+      (number, time, …). The exception escaped the input/change handler, so
+      Pickup windows, Pricing and Hours all appeared frozen while typing.
+      jsdom returns null instead of throwing, which is exactly why it passed.
+- [x] Numeric fields were clamped and re-rendered on every keystroke, which
+      REWROTE what was being typed: "8" into a capacity of 20 briefly read 820,
+      clamped to the 500 maximum, and replaced the field; prices could not take
+      a decimal at all, because "23." parses to 23 and overwrote the point.
+      Fields now parse without clamping while focused, normalise on blur, and
+      the section refreshes only its DERIVED output, never the inputs.
+- [x] Unsaved-changes navigation used `window.confirm`. Browsers offer "prevent
+      this page from creating additional dialogs", and once ticked confirm()
+      returns false forever — every nav click became a silent no-op. Replaced
+      with an in-page dialog, which can't be suppressed.
+- [x] Numeric inputs are `type="text" inputmode="numeric|decimal"`, since
+      `type="number"` exposes no selectionStart and so can't preserve a caret.
 
 > ⚠️ The dashboard is a PROTOTYPE standing in for the backend. Settings and
 > accounts live in localStorage, so they are per-browser and per-device, and
@@ -385,11 +410,18 @@ service. Roughly ordered by what blocks "going live."
 - [ ] Final brand copy review (hero, how-it-works, store details are placeholders).
 
 ### 12. Testing & QA  [~]
-- [x] Automated suite in-repo (`tests/`, 2026-07-28) — 180 checks over the
-      settings layer, per-store pricing/scheduling, roles, and the dashboard UI
-      in jsdom. `npm test`; the data suite needs no dependencies.
+- [x] Automated suite in-repo (`tests/`, 2026-07-28) — 209 checks over the
+      settings layer, per-store pricing/scheduling, roles, the dashboard UI in
+      jsdom, and the dashboard's typing/focus behaviour in real Chromium.
+      `npm test`; the data suite needs no dependencies.
 - [ ] Extend it to the builder/cart/checkout paths, which are still only
       covered by manual headless runs.
+
+> LESSON (2026-07-28): three dashboard bugs shipped green under jsdom. jsdom
+> returns null where browsers THROW (`input.selectionStart`), and models
+> focus/blur ordering and layout differently. Treat a jsdom pass as necessary,
+> never sufficient, for anything involving text input, focus or the caret —
+> add a case to `tests/dashboard-browser.test.js` instead.
 - [ ] End-to-end tests (Playwright/Cypress) for the full order flow.
 - [ ] Cross-browser/device matrix; real-device testing.
 - [ ] Load test slot booking & checkout for concurrency.
