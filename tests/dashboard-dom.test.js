@@ -30,6 +30,31 @@ function eq(name, a, b) { ok(name, a === b, `got ${JSON.stringify(a)}, want ${JS
 
 const pageErrors = [];
 
+/* jsdom returns null for `selectionStart` on input types that don't support
+   selection; every real browser THROWS InvalidStateError instead. That gap hid
+   a bug where reading the caret during a re-render killed the whole handler,
+   so make jsdom behave like a browser here. Keep this in place. */
+const SELECTABLE_TYPES = ["text", "search", "url", "tel", "password"];
+function matchBrowserSelectionBehaviour(w) {
+  ["selectionStart", "selectionEnd", "selectionDirection"].forEach((prop) => {
+    const desc = Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, prop);
+    if (!desc || !desc.get) return;
+    Object.defineProperty(w.HTMLInputElement.prototype, prop, {
+      configurable: true,
+      get() {
+        if (SELECTABLE_TYPES.indexOf(this.type) === -1) {
+          throw new w.DOMException(
+            `Failed to read the '${prop}' property from 'HTMLInputElement': ` +
+            `The input element's type ('${this.type}') does not support selection.`,
+            "InvalidStateError");
+        }
+        return desc.get.call(this);
+      },
+      set: desc.set,
+    });
+  });
+}
+
 function load(page, storage) {
   const vc = new VirtualConsole();
   vc.on("jsdomError", (e) => pageErrors.push(`${page}: ${e.message}`));
@@ -44,6 +69,7 @@ function load(page, storage) {
   });
 
   const w = dom.window;
+  matchBrowserSelectionBehaviour(w);
   // Seed localStorage before the page's scripts run against it.
   if (storage) Object.keys(storage).forEach((k) => w.localStorage.setItem(k, storage[k]));
 
@@ -71,7 +97,11 @@ function setChecked(w, el, on) {
   el.checked = on;
   el.dispatchEvent(new w.Event("change", { bubbles: true }));
 }
+// Focus first: a real user clicks into the field before typing, and that makes
+// the field document.activeElement during the handler — which is precisely the
+// condition that broke re-rendering on number inputs.
 function setValue(w, el, v, type) {
+  if (el.focus) el.focus();
   el.value = v;
   el.dispatchEvent(new w.Event(type || "input", { bubbles: true }));
 }

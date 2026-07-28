@@ -1413,11 +1413,15 @@
 
         if (e.target.closest("[data-export]")) {
           const blob = new Blob([Settings.exportJson()], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
+          a.href = url;
           a.download = "glaze-store-settings.json";
+          // Safari ignores click() on a link that isn't in the document.
+          document.body.appendChild(a);
           a.click();
-          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
           return;
         }
 
@@ -1561,11 +1565,26 @@
     paintSection();
   }
 
+  /* Input types whose selectionStart/setSelectionRange are usable. Reading
+     .selectionStart on any OTHER type (number, date, email, …) throws
+     InvalidStateError in real browsers — jsdom returns null instead, so this
+     divergence has to be handled explicitly rather than discovered in a test. */
+  const SELECTABLE = { text: 1, search: 1, url: 1, tel: 1, password: 1, textarea: 1 };
+
+  function caretOf(el) {
+    if (!el || !SELECTABLE[el.type]) return null;
+    try {
+      return typeof el.selectionStart === "number" ? el.selectionStart : null;
+    } catch (e) {
+      return null; // belt and braces — never let this kill the caller
+    }
+  }
+
   /* Re-render only the section body, keeping the draft as-is. */
   function rerenderSection(opts) {
     const active = document.activeElement;
     const focusId = (opts && opts.keepFocus) || (active && active.id) || null;
-    const caret = active && typeof active.selectionStart === "number" ? active.selectionStart : null;
+    const caret = caretOf(active);
 
     paintSection();
 
@@ -1573,8 +1592,8 @@
       const next = document.getElementById(focusId);
       if (next && next.focus) {
         next.focus();
-        // Text/number inputs lose the caret on innerHTML replacement.
-        if (caret != null && typeof next.setSelectionRange === "function" && next.type !== "number") {
+        // Text inputs lose the caret when innerHTML is replaced; put it back.
+        if (caret != null && typeof next.setSelectionRange === "function" && SELECTABLE[next.type]) {
           try { next.setSelectionRange(caret, caret); } catch (e) {}
         }
       }
