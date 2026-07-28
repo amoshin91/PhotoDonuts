@@ -1,15 +1,28 @@
 /* =============================================================================
    pricing.js — Price calculation + breakdown.
    One box = one dozen, all 12 sharing the same design. Prices are per box.
+
+   Prices can differ by store: the dashboard writes a per-store override that
+   settings.js merges onto `store.pricing`. Pickup is order-level, so one store
+   prices the whole cart — pass its id to priceBox/priceCart. Omitting the id
+   falls back to the shipped global table in config.js.
    ============================================================================ */
 (function () {
   "use strict";
-  const P = window.DB.PRICING;
+  const BASE = window.DB.PRICING;
+
+  // Which price list applies. Unknown/absent store ⇒ the config.js defaults.
+  function tableFor(storeId) {
+    if (!storeId) return BASE;
+    const store = window.DB.STORES.find((s) => s.id === storeId);
+    return (store && store.pricing) || BASE;
+  }
 
   function round2(n) { return Math.round(n * 100) / 100; }
 
   // Returns an itemized breakdown for a single box (a dozen of one design).
-  function priceBox(design) {
+  function priceBox(design, storeId) {
+    const P = tableFor(storeId);
     const type = DB.DONUT_TYPES.find((t) => t.id === design.typeId) || DB.DONUT_TYPES[0];
     const icing = DB.ICINGS.find((i) => i.id === design.icingId);
 
@@ -55,9 +68,10 @@
   }
 
   // Cart total across boxes, with tax.
-  function priceCart(boxes) {
+  function priceCart(boxes, storeId) {
+    const P = tableFor(storeId);
     const subtotal = round2(
-      boxes.reduce((s, b) => s + priceBox(b.design).subtotal, 0)
+      boxes.reduce((s, b) => s + priceBox(b.design, storeId).subtotal, 0)
     );
     const tax = round2(subtotal * P.taxRate);
     const total = round2(subtotal + tax);
@@ -67,9 +81,9 @@
   function fmt(n) {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: P.currency,
+      currency: BASE.currency,
     }).format(n);
   }
 
-  window.Pricing = { priceBox, priceCart, fmt, round2 };
+  window.Pricing = { priceBox, priceCart, fmt, round2, tableFor };
 })();

@@ -1,6 +1,6 @@
 # Glaze & Co. — Donut Builder · Project Status & Roadmap
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 
 This document tracks what has been built and what remains to take the site from a
 working front-end prototype to a fully functional, live, production service.
@@ -195,6 +195,65 @@ The no-key Leaflet map now reads like Google Maps instead of stock OSM.
       nothing to anchor to and the call silently no-opped. The view is now set
       before markers are added. (Pre-existing — the popup had never appeared.)
 
+### Staff dashboard + roles (2026-07-28)
+Store staff can now change menus, hours, pickup windows, pricing and ready-made
+boxes themselves. Settings are per-store and edited in a new dashboard; the
+storefront reads the merged result everywhere it used to read config.js.
+
+- [x] New `js/settings.js` — the override layer. config.js keeps the shipped
+      DEFAULTS; the dashboard writes only the DIFFERENCE to localStorage, and
+      `apply()` merges the two onto `DB.STORES` at page load, so menu.js,
+      pickup.js, pricing.js and app.js keep reading the shapes they already
+      read. A store carries three new fields: `active`, `scheduling`, `pricing`.
+      Values left at their default keep following config.js, so "reset" is just
+      "delete the override".
+- [x] New `js/auth.js` — accounts, session and the three roles. Roles differ in
+      SCOPE (which stores) plus admin-only capabilities; the capability table at
+      the top of the file is the single place to change what a role reaches.
+        admin   → every store + user management + data tools
+        cml     → a group of stores (an owner with several locations)
+        manager → exactly one store
+      Guards: the last admin can't be demoted or deleted, you can't delete the
+      account you're signed in with, a manager is always trimmed to one store,
+      and scope is filtered against stores that actually exist.
+- [x] New `dashboard.html` / `js/dashboard.js` / `css/dashboard.css` and
+      `login.html` / `js/login.js`. Sections are declared in one `SECTIONS`
+      array, each `{ id, label, cap, init, render, on, save }`, so adding a
+      settings area doesn't touch the shell. One delegated listener per event
+      type forwards to the active section — sections never attach their own.
+- [x] Editable per store: **menu** (icings + sprinkle colors, with the derived
+      effects and any newly-unmakeable ready-made boxes shown live), **hours**
+      (per-weekday open/close, same-day cutoff, closure dates, pause ordering),
+      **pickup windows** (lead time in hours+minutes, window length, dozens per
+      window, with a live preview of the next bookable times), **pricing** (base
+      dozen, type/filling/icing surcharges, extra sprinkle color, drizzle, tax,
+      with an example dozen priced live and per-field reset), and **ready-made
+      boxes** (switch chain designs off; author the store's own with a live
+      donut preview built from that store's menu).
+- [x] Dirty-state save bar with discard, a leave/navigate guard, `beforeunload`,
+      and ⌘/Ctrl+S.
+- [x] Storefront wired through the new layer: `Pickup.schedulingFor(store)`
+      replaces the global `SCHEDULING_DEFAULTS` read (and the slot-length /
+      lead-time / capacity copy is generated from it rather than hardcoded);
+      `Pricing.priceBox/priceCart` take a storeId and resolve that store's price
+      table; ready-made boxes come from `Settings.premadesFor(storeId)`.
+- [x] Paused stores drop out of `Pickup.sortStoresByDistance`, generate no
+      slots, and a persisted pickup pointing at one is discarded on load.
+- [x] Admin data tools: export / import the settings JSON, reset one store or
+      all of them back to config.js, reset accounts to the demo users.
+- [x] Test suites in `tests/` (§12 below): `settings-auth.test.js` (88 checks,
+      no dependencies) covers the merge, per-store pricing/scheduling, pause,
+      premades, persistence, reset/import and the roles; `dashboard-dom.test.js`
+      (92 checks, jsdom) signs in as each role, walks every section, drives real
+      clicks, and asserts saved edits reach the storefront. `npm test` runs both.
+
+> ⚠️ The dashboard is a PROTOTYPE standing in for the backend. Settings and
+> accounts live in localStorage, so they are per-browser and per-device, and
+> roles are enforced in the UI only — this is NOT a security boundary. The end
+> of `js/settings.js` maps each override onto its Supabase table, and the
+> dashboard's API shape is meant to survive the swap. §1/§5/§6 below are what
+> make it real.
+
 Validation & checkout UX:
 - [x] Checkout validation is field-level: offending inputs get `.is-invalid` +
       `aria-invalid`, and focus jumps to the first problem (was: one error
@@ -266,18 +325,29 @@ service. Roughly ordered by what blocks "going live."
 
 ### 5. Accounts & auth (toggle exists, no real auth)  [~]
 - [ ] Real authentication (email/password + social, or a provider like Auth0 /
-      Clerk / Firebase Auth).
+      Clerk / Firebase Auth). Covers BOTH customers and the staff dashboard —
+      `js/auth.js` is a localStorage stand-in with a non-cryptographic password
+      hash and must not ship as-is.
+- [ ] Enforce the dashboard's roles SERVER-SIDE (Supabase row-level security):
+      a CML must not be able to read or write a store outside their group. The
+      client-side checks in `js/auth.js` are UI affordances only.
 - [ ] Account area: saved designs, order history, reorder, saved payment methods.
 - [ ] Password reset, email verification, session management.
+- [ ] Audit log of settings changes (who changed a store's price/hours, when).
 
 ### 6. Inventory, capacity & store ops  [~]
 - [ ] Real per-slot capacity backed by the DB (current "X left" is deterministic
       mock data). Decrement on order, prevent overbooking with atomic checks.
 - [ ] Concurrency: two customers grabbing the last slot must not both succeed.
-- [ ] Admin/store dashboard: view & manage orders, mark fulfilled, adjust hours,
-      add blackout dates, set capacity, pause ordering.
-- [ ] Product/menu management UI so staff can change prices/options without code.
-- [ ] Lead-time/cutoff config per store editable by ops.
+- [~] Admin/store dashboard — BUILT as a localStorage prototype (2026-07-28):
+      adjust hours, add blackout dates, set capacity, pause ordering, all with
+      3 roles. Still to do: back it with the API/DB, enforce roles server-side,
+      and add ORDER management (view, mark fulfilled) — there are no orders to
+      manage until §1 and §7 exist.
+- [x] Product/menu management UI so staff can change prices/options without code
+      — per-store menu, pricing and ready-made boxes (2026-07-28). Needs the
+      server-authoritative pricing in §1 before it can be trusted for money.
+- [x] Lead-time/cutoff config per store editable by ops (2026-07-28).
 
 ### 7. Order lifecycle & fulfillment  [ ]
 - [ ] States: placed → paid → in production → ready → picked up → (canceled/refunded).
@@ -315,7 +385,11 @@ service. Roughly ordered by what blocks "going live."
 - [ ] Final brand copy review (hero, how-it-works, store details are placeholders).
 
 ### 12. Testing & QA  [~]
-- [ ] Expand the existing logic tests into an automated suite in-repo.
+- [x] Automated suite in-repo (`tests/`, 2026-07-28) — 180 checks over the
+      settings layer, per-store pricing/scheduling, roles, and the dashboard UI
+      in jsdom. `npm test`; the data suite needs no dependencies.
+- [ ] Extend it to the builder/cart/checkout paths, which are still only
+      covered by manual headless runs.
 - [ ] End-to-end tests (Playwright/Cypress) for the full order flow.
 - [ ] Cross-browser/device matrix; real-device testing.
 - [ ] Load test slot booking & checkout for concurrency.
@@ -335,6 +409,9 @@ service. Roughly ordered by what blocks "going live."
 - Per-slot "X left" capacity (mock) ....... js/pickup.js → bookedDozen()
 - Payment fields (mock, non-PCI) .......... js/app.js → renderCheckoutSection()
 - Email/SMS confirmation (simulated) ...... js/app.js → placeOrder()/renderConfirmation()
+- Staff accounts + passwords (demo) ....... js/auth.js → SEED_USERS, hash()
+- Role capabilities ....................... js/auth.js → ROLES
+- Store settings storage (localStorage) ... js/settings.js → LS_KEY / load()+save()
 
 
 ================================================================================
@@ -342,8 +419,10 @@ service. Roughly ordered by what blocks "going live."
 ================================================================================
 - Phase 1 (transactable): backend + DB, server-side pricing, Stripe payments,
   real email/SMS, real capacity with atomic booking. → can take real orders.
-- Phase 2 (operable): admin/store dashboard, order lifecycle + status page,
-  accounts/order history, real Google Maps + geocoding.
+- Phase 2 (operable): move the staff dashboard (built 2026-07-28, currently
+  localStorage) onto the API + real auth with server-enforced roles; order
+  lifecycle + status page, order management in the dashboard, accounts/order
+  history, real Google Maps + geocoding.
 - Phase 3 (launch-ready): legal/compliance, accessibility audit, analytics,
   performance/SEO, photography & final copy, monitoring, E2E tests, deploy.
 
@@ -380,12 +459,18 @@ The donut renderer (donut-svg.js), pricing math (pricing.js), and scheduling
 pricing, capacity, and timezones authoritatively.
 
 ### Database schema (Postgres / Supabase)  — prices stored in CENTS
-- users ......... id, email, name, phone, role(user|admin), created_at
-                  (or Supabase auth.users + a `profiles` table)
+- users ......... id, email, name, phone, role(customer|manager|cml|admin),
+                  created_at  (or Supabase auth.users + a `profiles` table)
+- user_stores ... user_id→users, store_id→stores  (which stores a manager/CML
+                  may administer; admins match every store, customers none.
+                  Mirrors `storeIds` in js/auth.js. Enforce with RLS:
+                  manager = exactly one row, cml = one or more.)
 - stores ........ id, name, address, lat, lng, timezone, phone, active
 - store_hours ... id, store_id→stores, weekday(0-6), open, close, cutoff
 - store_blackouts id, store_id→stores, date
 - store_settings  store_id, lead_time_min, slot_increment_min, slot_capacity_dozen
+- store_menu .... store_id, icing_ids(text[]), sprinkle_color_ids(text[])
+                  (NULL in a column = "carries everything", same rule as today)
 - donut_types ... id, slug, name, shape(ring|shell), dough_color, dough_shade,
                   blurb, allergens(text[]), active
 - fillings ...... id, slug, name, active
@@ -394,7 +479,9 @@ pricing, capacity, and timezones authoritatively.
 - pricing ....... base_dozen, additional_sprinkle_color, drizzle_cost, tax_rate,
                   type_modifiers(jsonb), filling_modifiers(jsonb), icing_modifiers(jsonb)
                   (one row, or per-store if prices vary by location)
-- premade_boxes . id, name, occasion, blurb, design(jsonb), active, sort
+- premade_boxes . id, store_id→stores (NULL = chain-wide), name, occasion,
+                  blurb, design(jsonb), active, sort
+- store_premade_optouts  store_id, premade_box_id  (a store hiding a chain box)
 - orders ........ id, user_id→users (nullable for guest), store_id→stores,
                   pickup_at(timestamptz), status(pending|paid|in_production|ready|
                   picked_up|canceled|refunded), subtotal_cents, tax_cents,
@@ -418,6 +505,9 @@ FOR UPDATE, reject if + new dozen > capacity, else insert. Prevents the
 - PREMADE_BOXES .......... → `premade_boxes`
 - GEO_LOOKUP / resolveLocation → real geocoding API (Google/Mapbox), server-side
 - bookedDozen() (mock) ... → real query against `slot_bookings`
+- localStorage overrides   → the per-store tables above; see the migration note
+  (js/settings.js)           at the end of js/settings.js for the field-by-field map
+- SEED_USERS (js/auth.js)  → `users` + `user_stores`, via Supabase Auth
 The frontend fetches all of the above via `GET /api/menu` and renders from it
 instead of the hardcoded config.
 
@@ -436,7 +526,11 @@ instead of the hardcoded config.
                              finalize order (status=paid), commit slot booking,
                              fire email + SMS; on failure → release reservation
 - GET  /api/orders ......... current user's orders (auth required)
-- /admin/* ................. order management, menu CRUD (admin role only)
+- GET/PUT /api/stores/:id/settings .. the dashboard's read/write endpoint —
+                             menu, hours, blackouts, windows, pricing, premades.
+                             Replaces js/settings.js's localStorage internals;
+                             RLS checks the caller against `user_stores`.
+- /admin/* ................. order management, user CRUD (admin role only)
 
 ### Stripe checkout flow (server-authoritative; PCI-safe)
 1. Client builds cart + pickup → POST /api/quote → server returns validated totals.
@@ -456,9 +550,13 @@ GOOGLE_MAPS_API_KEY.
 ### Build order (refines the phasing above)
 1. Supabase project → create schema → seed from config.js → ship GET /api/menu;
    point the frontend at it.
-2. Auth (Supabase) + orders/order_boxes persistence + /api/orders.
+2. Auth (Supabase) + orders/order_boxes persistence + /api/orders. Port the
+   staff dashboard's roles to real accounts + RLS on `user_stores`, and swap
+   js/settings.js's localStorage internals for /api/stores/:id/settings — the
+   dashboard UI itself shouldn't need rewriting.
 3. Stripe: /api/quote, /api/checkout (with capacity reservation), webhook.
-4. Email + SMS from the webhook; admin dashboard; real geocoding + live Google Map.
+4. Email + SMS from the webhook; order management in the dashboard; real
+   geocoding + live Google Map.
 5. Hardening: rate limiting, monitoring, legal pages, a11y audit, custom domain.
 
 > Decision to make early: keep the vanilla frontend and add serverless functions

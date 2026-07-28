@@ -20,17 +20,34 @@ python3 -m http.server 8000
 ## Project structure
 
 ```
-index.html        Page shell + mount points
-css/styles.css    Design system, components, responsive + reduced-motion
-js/config.js      ⭐ ALL tunable data (prices, palette, donut types, stores)
-js/menu.js        Per-store menu: what a store can make + design validation
-js/donut-svg.js   Layered, seeded SVG donut renderer
-js/pricing.js     Price + breakdown math
-js/pickup.js      Distance, geocode, timezone-aware slot generation
-js/app.js         State + UI wiring (builder, cart, pickup, checkout)
+index.html          Builder page — store gate, donut builder, cart drawer
+boxes.html          Ready-made boxes
+checkout.html       Pickup + payment
+dashboard.html      ⭐ Staff dashboard (store settings)
+login.html          Staff sign-in
+
+css/styles.css      Design system, components, responsive + reduced-motion
+css/dashboard.css   Dashboard-only styles, layered on the same tokens
+
+js/config.js        ⭐ ALL shipped defaults (prices, palette, types, stores)
+js/settings.js      ⭐ Per-store overrides saved by the dashboard, merged over config
+js/auth.js          Staff accounts, the three roles, session (PROTOTYPE)
+js/menu.js          Per-store menu: what a store can make + design validation
+js/donut-svg.js     Layered, seeded SVG donut renderer
+js/pricing.js       Price + breakdown math (per-store price tables)
+js/pickup.js        Distance, geocode, timezone-aware slot generation
+js/app.js           Storefront state + UI wiring
+js/dashboard.js     Dashboard state + UI wiring
+js/login.js         Sign-in page wiring
+
+tests/              node test suites (see "Tests" below)
 ```
 
-## Where to change things — everything lives in `js/config.js`
+## Where to change things — the shipped defaults live in `js/config.js`
+
+Most per-store values below can also be changed from the [staff
+dashboard](#staff-dashboard) without touching code. `config.js` remains the
+default every store falls back to.
 
 | Want to change…                  | Edit in `config.js`                          |
 |----------------------------------|----------------------------------------------|
@@ -44,6 +61,8 @@ js/app.js         State + UI wiring (builder, cart, pickup, checkout)
 | What a store can make            | `STORES[n].menu`                             |
 | Lead time / increment / capacity | `SCHEDULING_DEFAULTS`                        |
 | Map basemap / tile provider      | `MAP_TILES`                                  |
+| Demo staff accounts              | `SEED_USERS` in `js/auth.js`                 |
+| What each role can edit          | `ROLES` in `js/auth.js`                      |
 
 All pricing values are **placeholders** chosen to be easy to swap.
 
@@ -79,6 +98,70 @@ store can't make and lets the customer remove just those or cancel the switch
 (`Menu.checkDesign`). The in-progress builder design is nudged onto the new
 menu instead (`Menu.coerceDesign`), and checkout re-validates the whole cart in
 case a store's menu changed between visits.
+
+## Staff dashboard
+
+`dashboard.html` lets store staff change all of the above **without editing
+code**. Sign in at `login.html` — the page lists three demo accounts, one per
+role, and clicking one fills the form.
+
+| Role | Reaches | Also can |
+|------|---------|----------|
+| **Admin** | every store | manage users, export/import/reset settings |
+| **CML** | a group of stores (an owner with several locations) | — |
+| **Store Manager** | exactly one store | — |
+
+All three can edit the same things *within* a store they reach:
+
+- **Menu & colors** — which icings and sprinkle colors this store stocks. The
+  panel shows the knock-on effects live (custom icing, the Rainbow preset) and
+  warns when a change would make a ready-made box unavailable.
+- **Hours & closures** — per-weekday open/close, the same-day cutoff, holiday
+  closure dates, and a **pause switch** that hides the store from the storefront.
+- **Pickup windows** — lead time (hours + minutes), window length, and dozens
+  per window, with a live preview of the next bookable times.
+- **Pricing** — base dozen, per-type/filling/icing surcharges, extra sprinkle
+  color, drizzle, and tax rate, with an example dozen priced live.
+- **Ready-made boxes** — switch chain designs off for this store, and build the
+  store's own pre-designed dozens with a live donut preview.
+
+Change what a role can edit in the `ROLES` capability table at the top of
+`js/auth.js`; the dashboard's navigation and store picker follow it.
+
+### How settings are stored
+
+`js/config.js` holds the **shipped defaults**; the dashboard writes only the
+**difference** to `localStorage`, and `js/settings.js` merges the two at page
+load into the `DB.STORES` objects the rest of the app already reads:
+
+```
+config.js defaults  +  saved overrides  =  what the storefront sees
+```
+
+Two consequences worth knowing:
+
+- Anything left at its default keeps following `config.js`, so a chain-wide
+  price change in code still reaches every store that never overrode it.
+  "Reset" is simply "delete the override".
+- Because it's `localStorage`, **settings are per-browser and per-device, and
+  the roles are enforced in the UI only** — this is a prototype standing in for
+  the backend, not a security boundary. `js/settings.js` ends with a note
+  mapping each override onto its Supabase table for the migration.
+
+## Tests
+
+The site still needs no build step; the suites are plain node.
+
+```bash
+node tests/settings-auth.test.js   # data layer — no dependencies
+npm install && npm test            # adds the jsdom UI suite
+```
+
+`settings-auth.test.js` covers the override merge, per-store pricing and
+scheduling, pause, premades, persistence/reset/import, and the auth roles.
+`dashboard-dom.test.js` loads the real pages in jsdom, signs in as each role,
+walks every dashboard section, and asserts that a saved edit shows up on the
+storefront.
 
 ## Google Maps
 
@@ -121,9 +204,14 @@ scale, or point `MAP_TILES.url` at your own tile source.
   exclusive toggle. Every swatch shows its name (never color alone → WCAG AA).
 - **Pickup is order-level**: all boxes in one order share a store + time. Each box
   keeps its own independent design. Minimum order is 1 dozen.
-- **Scheduling** enforces operating hours, per-day same-day cutoffs, a 30-minute
-  lead time, blackout days, a 20-dozen/slot capacity cap, and correct store
-  timezones (a Pacific user can book a New York pickup and see it in ET).
+- **Scheduling** enforces operating hours, per-day same-day cutoffs, lead time,
+  blackout days, a per-slot capacity cap, and correct store timezones (a Pacific
+  user can book a New York pickup and see it in ET). Lead time, window length
+  and capacity are **per store** and set in the dashboard; the defaults are
+  30 min / 30 min / 20 dozen.
+- **Paused stores** disappear from the store picker and the map, and can't be
+  booked — a persisted pickup at a store that was paused since the last visit
+  is dropped rather than left broken.
 - **Confirmation** simulates email + SMS; payment is a mock form (wire to Stripe
   Elements / PaymentIntents for production).
 

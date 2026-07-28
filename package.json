@@ -1,0 +1,15 @@
+{
+  "name": "glaze-donut-builder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Glaze & Co. donut builder + staff dashboard. The site itself needs no build step — this file exists only so the test suite can pull in jsdom.",
+  "scripts": {
+    "test": "node tests/settings-auth.test.js && node tests/dashboard-dom.test.js",
+    "test:data": "node tests/settings-auth.test.js",
+    "test:dom": "node tests/dashboard-dom.test.js",
+    "serve": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "jsdom": "^27.0.0"
+  }
+}

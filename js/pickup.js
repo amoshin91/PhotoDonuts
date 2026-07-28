@@ -31,8 +31,11 @@
     return R * 2 * Math.asin(Math.sqrt(h));
   }
 
+  // Customer-facing, so paused stores are left out — a store the dashboard has
+  // switched off must not appear in the picker or on the map.
   function sortStoresByDistance(loc) {
-    return D.STORES.map((s) => ({
+    const stores = window.Settings ? Settings.orderableStores() : D.STORES;
+    return stores.map((s) => ({
       ...s,
       distance: loc ? distanceMiles(loc, s) : null,
     })).sort((a, b) => {
@@ -196,15 +199,35 @@
     return Math.floor((h % 1000) / 1000 * (cap * 1.15));
   }
 
+  // A store's scheduling rules, falling back to the shipped defaults for any
+  // store the dashboard has never touched.
+  function schedulingFor(store) {
+    return Object.assign({}, D.SCHEDULING_DEFAULTS, (store && store.scheduling) || {});
+  }
+
+  // "2 hr 30 min" / "45 min" — used wherever lead time is explained to a customer.
+  function formatDuration(mins) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (!h) return `${m} min`;
+    if (!m) return `${h} hr`;
+    return `${h} hr ${m} min`;
+  }
+
   /**
    * Generate pickup slots for one store on one date (store-local YYYY-MM-DD).
    * Returns { closed, reason, slots: [{ hm, label, instant, available, remaining }] }
    */
   function generateSlots(store, dateStr) {
-    const sched = D.SCHEDULING_DEFAULTS;
+    // Lead time, slot length and capacity are per-store (set in the dashboard);
+    // a store that has never been edited still gets the config.js defaults.
+    const sched = schedulingFor(store);
     const weekday = weekdayOf(dateStr);
     const hours = store.hours[weekday];
 
+    if (store.active === false) {
+      return { closed: true, reason: "This store has paused online ordering", slots: [] };
+    }
     if ((store.blackoutDates || []).indexOf(dateStr) !== -1) {
       return { closed: true, reason: "Closed — holiday / blackout day", slots: [] };
     }
@@ -290,6 +313,8 @@
     resolveLocation,
     geocode,
     generateSlots,
+    schedulingFor,
+    formatDuration,
     formatPickupWhen,
     minSelectableDate,
     addDays,

@@ -82,7 +82,8 @@
     // leave the persisted pickup alone for the page that actually uses it.
     if (typeof Pickup === "undefined") return;
     const store = DB.STORES.find((s) => s.id === p.storeId);
-    if (!store) { p.storeId = null; p.dateStr = null; p.slotHm = null; return; }
+    // Gone from config, or the dashboard has since paused online ordering there.
+    if (!store || store.active === false) { p.storeId = null; p.dateStr = null; p.slotHm = null; return; }
     if (p.dateStr && p.dateStr < Pickup.minSelectableDate(store)) { p.dateStr = null; p.slotHm = null; return; }
     if (p.dateStr && p.slotHm) {
       const res = Pickup.generateSlots(store, p.dateStr);
@@ -539,7 +540,8 @@
     const extra = Math.max(0, count - 1);
     const bonus = max > DB.MAX_SPRINKLE_COLORS ? " (Vanilla unlocks a 5th)" : "";
     if (count === 0) { note.textContent = `Choose up to ${max} colors. First color is free.${bonus}`; return; }
-    const extraTxt = extra > 0 ? `+${Pricing.fmt(extra * DB.PRICING.additionalSprinkleColor)} for ${extra} extra` : "no extra charge";
+    const perColor = Pricing.tableFor(state.pickup.storeId).additionalSprinkleColor;
+    const extraTxt = extra > 0 ? `+${Pricing.fmt(extra * perColor)} for ${extra} extra` : "no extra charge";
     note.textContent = `${count} of ${max} colors selected · ${extraTxt}.${bonus}`;
   }
 
@@ -617,7 +619,7 @@
   }
 
   function renderPrice() {
-    const { subtotal } = Pricing.priceBox(state.design);
+    const { subtotal } = Pricing.priceBox(state.design, state.pickup.storeId);
     const el = $("#boxPrice");
     if (el.textContent !== Pricing.fmt(subtotal)) {
       el.textContent = Pricing.fmt(subtotal);
@@ -629,7 +631,7 @@
 
   function renderBreakdown() {
     const panel = $("#breakdownPanel");
-    const { lines, subtotal } = Pricing.priceBox(state.design);
+    const { lines, subtotal } = Pricing.priceBox(state.design, state.pickup.storeId);
     panel.innerHTML =
       lines.map((l) => `<div class="breakdown__row"><span>${l.label}</span><span>${Pricing.fmt(l.amount)}</span></div>`).join("") +
       `<div class="breakdown__row breakdown__row--total"><span>Box subtotal (12)</span><span>${Pricing.fmt(subtotal)}</span></div>` +
@@ -769,7 +771,7 @@
       return;
     }
 
-    const totals = Pricing.priceCart(expandedBoxes());
+    const totals = Pricing.priceCart(expandedBoxes(), state.pickup.storeId);
     body.innerHTML =
       renderCartSection({ context: "drawer" }) +
       `<div class="cart-foot">
@@ -785,7 +787,7 @@
     const rows = state.cart.boxes.map((b) => {
       const resolved = resolveDesign(b.design);
       const svg = DonutSVG.render(resolved, { size: 56, decorative: true });
-      const price = Pricing.priceBox(b.design).subtotal;
+      const price = Pricing.priceBox(b.design, state.pickup.storeId).subtotal;
       const manage = ctx === "drawer"
         ? `<button class="link-btn" data-act="edit" data-id="${b.id}">Edit</button>
            <button class="link-btn link-btn--muted" data-act="dup" data-id="${b.id}">Duplicate</button>`
@@ -1043,6 +1045,8 @@
       rebuildStoreOptions();
       update();
     }
+    // ready-made boxes and their prices are both store-scoped now
+    renderFeatured();
     syncCartCount();
     rerenderStoreUI();
     if (adjustments.length) toast("Design adjusted: " + adjustments.join("; "), true);
@@ -1227,7 +1231,10 @@
   function renderDateTime(store) {
     const p = state.pickup;
     const need = Math.max(1, dozenCount());
-    const cap = DB.SCHEDULING_DEFAULTS.slotCapacityDozen;
+    // Lead time, window length and per-slot capacity are all set per store in
+    // the dashboard, so the copy below has to read them rather than hardcode.
+    const sched = Pickup.schedulingFor(store);
+    const cap = sched.slotCapacityDozen;
     const minDate = Pickup.minSelectableDate(store);
     if (!p.dateStr) p.dateStr = firstOpenDate(store, minDate, need);
 
@@ -1272,9 +1279,9 @@
         <div class="day-chips">${chips}</div>
       </div>
       <div class="field">
-        <span class="field-label">Pickup time · 30-min windows</span>
+        <span class="field-label">Pickup time · ${sched.slotIncrementMinutes}-min windows</span>
         ${slotsHtml}
-        <p class="field-note" style="margin-top:.5rem">30-min minimum lead time · same-day cutoff &amp; store hours applied · ${cap} dozen per slot${needTxt}.</p>
+        <p class="field-note" style="margin-top:.5rem">${Pickup.formatDuration(sched.leadTimeMinutes)} minimum lead time · same-day cutoff &amp; store hours applied · ${cap} dozen per slot${needTxt}.</p>
       </div>`;
   }
 
@@ -1377,7 +1384,7 @@
   }
 
   function renderTotalsSection() {
-    const totals = Pricing.priceCart(expandedBoxes());
+    const totals = Pricing.priceCart(expandedBoxes(), state.pickup.storeId);
     const ready = pickupComplete() && !incompatibleBoxes().length;
     const store = DB.STORES.find((s) => s.id === state.pickup.storeId);
     const whenText = ready ? Pickup.formatPickupWhen(store, state.pickup.dateStr, state.pickup.slotHm) : null;
@@ -1589,7 +1596,7 @@
     }
 
     const store = DB.STORES.find((s) => s.id === state.pickup.storeId);
-    const totals = Pricing.priceCart(expandedBoxes());
+    const totals = Pricing.priceCart(expandedBoxes(), state.pickup.storeId);
     state.placed = {
       orderId: "GC-" + Math.random().toString(36).slice(2, 7).toUpperCase(),
       store,
@@ -1728,14 +1735,22 @@
     return Object.assign(DEFAULT_DESIGN(), JSON.parse(JSON.stringify(p.design)));
   }
 
+  /* Ready-made boxes on offer: the shipped catalog minus anything the chosen
+     store switched off in its dashboard, plus any designs that store authored
+     itself. Before a store is chosen, show the full shipped catalog. */
+  function storePremades() {
+    const id = state.pickup.storeId;
+    return id && window.Settings ? Settings.premadesFor(id) : DB.PREMADE_BOXES;
+  }
+
   function renderFeatured() {
     const root = $("#featuredGrid");
     if (!root) return;
     const store = selectedStore();
-    root.innerHTML = DB.PREMADE_BOXES.map((p) => {
+    root.innerHTML = storePremades().map((p) => {
       const design = premadeDesign(p);
       const svg = DonutSVG.render(resolveDesign(design), { size: 134, decorative: true });
-      const price = Pricing.priceBox(design).subtotal;
+      const price = Pricing.priceBox(design, state.pickup.storeId).subtotal;
       // once a store is chosen, say up front which presets it can't make
       const problems = premadeBlocked(p);
       const note = problems
@@ -1783,7 +1798,7 @@
   }
 
   function addPremade(id) {
-    const p = DB.PREMADE_BOXES.find((x) => x.id === id);
+    const p = storePremades().find((x) => x.id === id);
     if (!p) return;
     if (!requireStore()) return;
     const problems = premadeBlocked(p);
@@ -1799,7 +1814,7 @@
   }
 
   function customizePremade(id) {
-    const p = DB.PREMADE_BOXES.find((x) => x.id === id);
+    const p = storePremades().find((x) => x.id === id);
     if (!p) return;
     if (!requireStore()) return;
     state.design = premadeDesign(p);
